@@ -246,8 +246,13 @@ Also write `transcript.md` (speaker-labeled markdown of the final script,
 for pre-render review) and `episode.json`:
 
 ```json
-{"id": "<episode-dir-name>", "title": "...", "description": "<one sentence for the podcast app>", "project": "<project-dirname>", "lens": "...", "date": "<YYYY-MM-DD>"}
+{"id": "<episode-dir-name>", "title": "...", "description": "<one sentence for the podcast app>", "project": "<project-dirname>", "project_name": "<display name>", "lens": "...", "date": "<YYYY-MM-DD>"}
 ```
+
+`project_name` (optional but recommended) — the product's human display name as
+it should appear on the episode cover art, e.g. `"Human Harness"` for slug
+`human-harness`. Use the product's real branding/capitalization; omit only if
+the title-cased slug is already correct.
 
 `script.json` schema:
 ```json

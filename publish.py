@@ -79,6 +79,7 @@ class Episode:
     title: str
     description: str
     project: str
+    project_name: str  # Human display name rendered on the episode cover art.
     lens: str
     date: str
     turns: list[dict]
@@ -261,6 +262,14 @@ def load_episode(episode_dir: Path) -> Episode:
             f"must be in YYYY-MM-DD form"
         )
 
+    # Optional human display name for cover art; fall back to the derived
+    # slug when absent, non-string, or blank (never raises).
+    raw_name = meta.get("project_name")
+    if isinstance(raw_name, str) and raw_name.strip():
+        project_name = raw_name.strip()
+    else:
+        project_name = values["project"].replace("-", " ").replace("_", " ").title()
+
     turns = script.get("turns")
     if not isinstance(turns, list) or not turns:
         raise EpisodeError("script.json must have a non-empty 'turns' list")
@@ -284,6 +293,7 @@ def load_episode(episode_dir: Path) -> Episode:
         title=values["title"],
         description=values["description"],
         project=values["project"],
+        project_name=project_name,
         lens=values["lens"],
         date=values["date"],
         turns=turns,

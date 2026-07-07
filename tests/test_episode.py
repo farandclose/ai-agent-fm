@@ -83,3 +83,26 @@ def test_non_object_script_json_raises(tmp_path):
     (d / "script.json").write_text(json.dumps(None))
     with pytest.raises(publish.EpisodeError, match="script.json"):
         publish.load_episode(d)
+
+
+def test_project_name_defaults_to_titlecased_slug(tmp_path):
+    ep = publish.load_episode(make_episode_dir(tmp_path))
+    assert ep.project_name == "Clicky"
+
+
+def test_project_name_titlecases_hyphens_and_underscores(tmp_path):
+    meta = dict(META, project="human-harness_cli")
+    ep = publish.load_episode(make_episode_dir(tmp_path, meta=meta))
+    assert ep.project_name == "Human Harness Cli"
+
+
+def test_project_name_field_overrides_slug(tmp_path):
+    meta = dict(META, project_name="Human Harness CLI")
+    ep = publish.load_episode(make_episode_dir(tmp_path, meta=meta))
+    assert ep.project_name == "Human Harness CLI"
+
+
+def test_blank_project_name_falls_back_to_slug(tmp_path):
+    meta = dict(META, project_name="   ")
+    ep = publish.load_episode(make_episode_dir(tmp_path, meta=meta))
+    assert ep.project_name == "Clicky"
