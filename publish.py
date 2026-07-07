@@ -561,7 +561,9 @@ _COVER_SIZE = 3000
 _COVER_MARGIN = round(_COVER_SIZE * 0.08)
 _NEAR_WHITE = (245, 245, 240)  # #F5F5F0 — reads as white without clipping.
 _TITLE_MAX_PT = 340  # Largest title size we try; auto-fit shrinks from here.
-_TITLE_MIN_PT = 72  # Floor so a pathological name still renders something.
+_TITLE_MIN_PT = 72  # Preferred floor for wrapped text; auto-fit shrinks below
+# this only for a pathological unbroken word (down to _TITLE_HARD_MIN_PT).
+_TITLE_HARD_MIN_PT = 8  # Absolute floor: guarantees an overwide token still fits.
 _TITLE_STEP_PT = 8  # Auto-fit granularity.
 _LINE_SPACING = 1.1  # Multiplier on line height for multi-line titles.
 _SHOWMARK_PT = 80
@@ -610,11 +612,14 @@ def _fit_title(text: str, font_path: Path, box: int, image_font):
     Returns ``(font, lines, line_height)``. Tries sizes from ``_TITLE_MAX_PT``
     down to ``_TITLE_MIN_PT``; at each size the text is word-wrapped and
     accepted once every line fits the width and the stacked block fits the
-    height. Falls back to the minimum size (rendered anyway) if nothing fits.
+    height. If even ``_TITLE_MIN_PT`` leaves the widest line too wide (an
+    unbreakable overwide word), it keeps shrinking down to
+    ``_TITLE_HARD_MIN_PT`` until the width fits, so text never draws past the
+    content box.
     """
     words = text.split()
     chosen = None
-    for pt in range(_TITLE_MAX_PT, _TITLE_MIN_PT - 1, -_TITLE_STEP_PT):
+    for pt in range(_TITLE_MAX_PT, _TITLE_HARD_MIN_PT - 1, -_TITLE_STEP_PT):
         font = image_font.truetype(str(font_path), pt)
         lines = _wrap_title(words, font, box)
         ascent, descent = font.getmetrics()
@@ -622,7 +627,11 @@ def _fit_title(text: str, font_path: Path, box: int, image_font):
         widest = max((font.getlength(line) for line in lines), default=0)
         block_height = line_height * len(lines)
         chosen = (font, lines, line_height)
+        # Prefer the first size where the whole block fits. Once past the soft
+        # floor, keep going for width alone so an unbreakable word still fits.
         if widest <= box and block_height <= box:
+            break
+        if pt <= _TITLE_MIN_PT and widest <= box:
             break
     return chosen
 
@@ -662,7 +671,15 @@ def make_cover(ep: Episode, root: Path) -> Path:
         raise ConfigError(f"cover font missing: {font_path} (SpaceGrotesk-Bold.ttf)")
 
     backdrop_path = pool[backdrop_index(ep.project, len(pool))]
-    canvas = Image.open(backdrop_path).convert("RGB")
+    try:
+        with Image.open(backdrop_path) as src:
+            canvas = src.convert("RGB")
+    except (OSError, ValueError) as exc:
+        raise ConfigError(
+            f"cover backdrop is unreadable or corrupt: {backdrop_path} "
+            f"({exc}) — regenerate the pool with "
+            "`uv run artwork/make_backdrops.py`"
+        ) from exc
     if canvas.size != (_COVER_SIZE, _COVER_SIZE):
         canvas = canvas.resize((_COVER_SIZE, _COVER_SIZE), Image.LANCZOS)
 
@@ -670,10 +687,17 @@ def make_cover(ep: Episode, root: Path) -> Path:
     center_x = _COVER_SIZE / 2
     content = _COVER_SIZE - 2 * _COVER_MARGIN
 
-    # Project name: dominant, auto-fitted, vertically centered.
-    font, lines, line_height = _fit_title(
-        ep.project_name, font_path, content, ImageFont
-    )
+    # Project name: dominant, auto-fitted, vertically centered. Font load can
+    # raise on a corrupt/unreadable .ttf even when the file exists.
+    try:
+        font, lines, line_height = _fit_title(
+            ep.project_name, font_path, content, ImageFont
+        )
+    except OSError as exc:
+        raise ConfigError(
+            f"cover font is unreadable or corrupt: {font_path} "
+            f"(SpaceGrotesk-Bold.ttf) ({exc})"
+        ) from exc
     block_height = line_height * len(lines)
     y = round((_COVER_SIZE - block_height) / 2)
     for line in lines:
@@ -685,7 +709,13 @@ def make_cover(ep: Episode, root: Path) -> Path:
     # it blends toward the backdrop rather than sitting as opaque white.
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
-    mark_font = ImageFont.truetype(str(font_path), _SHOWMARK_PT)
+    try:
+        mark_font = ImageFont.truetype(str(font_path), _SHOWMARK_PT)
+    except OSError as exc:
+        raise ConfigError(
+            f"cover font is unreadable or corrupt: {font_path} "
+            f"(SpaceGrotesk-Bold.ttf) ({exc})"
+        ) from exc
     mark_ascent, mark_descent = mark_font.getmetrics()
     mark_top = round(
         _COVER_SIZE * (1 - _SHOWMARK_BOTTOM_FRAC) - (mark_ascent + mark_descent)
@@ -702,7 +732,10 @@ def make_cover(ep: Episode, root: Path) -> Path:
     canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
 
     cover_path = ep.dir / "cover.jpg"
-    canvas.save(cover_path, "JPEG", quality=90)
+    try:
+        canvas.save(cover_path, "JPEG", quality=90)
+    except OSError as exc:
+        raise EpisodeError(f"could not write cover art to {cover_path}: {exc}") from exc
     return cover_path
 
 

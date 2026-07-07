@@ -143,3 +143,28 @@ def test_make_cover_missing_font_raises(tmp_path):
     ep = publish.load_episode(make_episode_dir(tmp_path))
     with pytest.raises(publish.ConfigError, match="SpaceGrotesk"):
         publish.make_cover(ep, tmp_path)
+
+
+def test_make_cover_corrupt_backdrop_raises_config_error(tmp_path):
+    make_artwork(tmp_path)
+    for f in sorted((tmp_path / "artwork" / "backdrops").glob("*.jpg")):
+        f.write_bytes(b"not a jpeg at all")
+    ep = publish.load_episode(make_episode_dir(tmp_path))
+    with pytest.raises(publish.ConfigError, match="backdrop"):
+        publish.make_cover(ep, tmp_path)
+
+
+def test_make_cover_unbreakable_word_stays_on_canvas(tmp_path):
+    # A single unbroken 80-char token must shrink until it fits — the
+    # outermost 2% of the canvas (left/right mid-edges included) must
+    # remain pure backdrop (solid red fixture backdrop-00 or blue -01).
+    make_artwork(tmp_path)
+    meta = dict(META, project_name="X" * 80)
+    ep = publish.load_episode(make_episode_dir(tmp_path, meta=meta))
+    with Image.open(publish.make_cover(ep, tmp_path)) as img:
+        assert img.size == (3000, 3000)
+        for x, y in ((10, 1500), (2990, 1500)):
+            r, g, b = img.getpixel((x, y))[:3]
+            assert (r > 180 and b < 100) or (b > 180 and r < 100), (
+                f"text bled into the edge margin at {(x, y)}: {(r, g, b)}"
+            )
