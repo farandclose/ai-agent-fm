@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import publish
+from tests.test_artwork import make_artwork
 
 BASE_TOML = """
 [feed]
@@ -175,6 +176,7 @@ def _make_episode(tmp_path: Path) -> Path:
 def test_publish_dispatches_to_elevenlabs(monkeypatch, tmp_path):
     toml = BASE_TOML.replace('[tts]\n', '[tts]\nprovider = "elevenlabs"\n') + EL_BLOCK
     _write(tmp_path, toml)
+    make_artwork(tmp_path)
     ep_dir = _make_episode(tmp_path)
     calls = []
 

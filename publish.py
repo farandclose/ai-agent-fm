@@ -947,6 +947,12 @@ def _run_publish(args: argparse.Namespace) -> int:
         meta_path.write_text(json.dumps({"duration_secs": duration_secs}) + "\n")
         wav_path.unlink()
 
+    # Cover art is (re)built on every publish — fresh, --fake-tts, --no-upload,
+    # and --republish — because regeneration is idempotent and free, mirroring
+    # how feed.xml is always regenerated. A missing backdrop pool or font raises
+    # ConfigError, which main() turns into an actionable exit-1 error.
+    ep_cover_path = make_cover(ep, root)
+
     if args.no_upload:
         print(mp3_path)
         return 0
@@ -958,6 +964,9 @@ def _run_publish(args: argparse.Namespace) -> int:
     mp3_key = f"episodes/{ep.id}.mp3"
     upload_file(client, cfg.bucket, mp3_key, mp3_path, "audio/mpeg")
 
+    cover_key = f"episodes/{ep.id}.jpg"
+    upload_file(client, cfg.bucket, cover_key, ep_cover_path, "image/jpeg")
+
     entry = {
         "id": ep.id,
         "title": ep.title,
@@ -966,6 +975,7 @@ def _run_publish(args: argparse.Namespace) -> int:
         "lens": ep.lens,
         "date": ep.date,
         "mp3_key": mp3_key,
+        "cover_key": cover_key,
         "duration_secs": duration_secs,
         "bytes": mp3_path.stat().st_size,
     }

@@ -35,7 +35,7 @@ The system is deliberately split into a judgment half and a mechanical half:
 
 ### publish.py pipeline
 
-`script.json` turns → `chunk_turns()` (greedy, never splits a turn) → per-chunk TTS with retry/backoff (`synthesize_all` — all chunks must succeed before anything is written) → PCM concat (shared format everywhere: 24 kHz, 16-bit LE, mono) → WAV → ffmpeg MP3 → upload → `upsert_manifest()` → `generate_feed()` → upload feed.
+`script.json` turns → `chunk_turns()` (greedy, never splits a turn) → per-chunk TTS with retry/backoff (`synthesize_all` — all chunks must succeed before anything is written) → PCM concat (shared format everywhere: 24 kHz, 16-bit LE, mono) → WAV → ffmpeg MP3 → `make_cover()` (project-locked backdrop + typography) → upload mp3 + cover → `upsert_manifest()` → `generate_feed()` → upload feed.
 
 Two TTS providers, selected by `agentfm.toml [tts] provider`, with different call shapes:
 - **elevenlabs** (default): raw `urllib` POST to the Text-to-Dialogue API — takes the turns list directly with a `voice_id` per input, 2,000-char chunks, model `eleven_v3` (supports `[laughs]`-style audio tags). Voice IDs live in `[tts.elevenlabs]`.
@@ -45,8 +45,8 @@ Error handling contract: every user-facing failure raises an `AgentFMError` subc
 
 ### State and data flow
 
-- `episodes.json` (committed) is the **source of truth** for the feed; `feed.xml` is regenerated from it idempotently. To fix/pull an episode: edit `episodes.json` by hand, then `--republish` any current episode to push the rebuilt feed.
-- Per-episode dir: `dossier.md` (guest's inside-out knowledge), `host-brief.md` (host's outside-in research — the two docs create real information asymmetry in the dialogue), `script.json` (provider-neutral `{speaker, text}` turns, speakers only `HOST`/`GUEST`), `episode.json` (metadata; `lens` must be `engg|sales|product`), `audio_meta.json` + `episode.mp3` (generated; audio is gitignored).
+- `episodes.json` (committed) is the **source of truth** for the feed; `feed.xml` is regenerated from it idempotently. Entries carry `cover_key` (the episode's uploaded art key), and item-level artwork appears in the feed only for episodes that have it. To fix/pull an episode: edit `episodes.json` by hand, then `--republish` any current episode to push the rebuilt feed.
+- Per-episode dir: `dossier.md` (guest's inside-out knowledge), `host-brief.md` (host's outside-in research — the two docs create real information asymmetry in the dialogue), `script.json` (provider-neutral `{speaker, text}` turns, speakers only `HOST`/`GUEST`), `episode.json` (metadata; `lens` must be `engg|sales|product`), `audio_meta.json` + `episode.mp3` + `cover.jpg` (generated episode art; audio and cover are gitignored).
 - `agentfm.toml` — feed metadata, bucket, voice casting. `load_config` collects *all* missing keys into one error rather than failing on the first.
 
 ### Tests
@@ -58,3 +58,4 @@ Fully offline. ElevenLabs tests monkeypatch the module-level `urllib.request.url
 - The ElevenLabs call clears `ssl.VERIFY_X509_STRICT` (verification stays on) so corporate-proxy CAs work on Python 3.13 — don't "clean up" that context.
 - ElevenLabs voice IDs in config must be free-tier premade voices; paid library voices fail via API (commit 0d13dc2).
 - `SKILL.md` hardcodes `AGENTFM_ROOT` as an absolute path — it must be updated if the repo moves.
+- `artwork/backdrops/` (12 committed JPEGs) and `artwork/fonts/SpaceGrotesk-Bold.ttf` are runtime dependencies of every publish — deleting them breaks `make_cover` with a `ConfigError`; regenerate backdrops with `uv run artwork/make_backdrops.py`.
