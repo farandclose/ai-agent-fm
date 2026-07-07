@@ -38,3 +38,41 @@ def test_bundled_font_loads():
 def test_font_license_committed():
     text = (REPO_ROOT / "artwork" / "fonts" / "OFL.txt").read_text()
     assert "SIL OPEN FONT LICENSE" in text
+
+
+def _load_generator():
+    path = REPO_ROOT / "artwork" / "make_backdrops.py"
+    spec = importlib.util.spec_from_file_location("make_backdrops", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_generator_is_deterministic():
+    gen = _load_generator()
+    a = gen.generate_backdrop(0, 128)
+    b = gen.generate_backdrop(0, 128)
+    assert a.tobytes() == b.tobytes()
+
+
+def test_generator_designs_all_differ():
+    gen = _load_generator()
+    renders = [gen.generate_backdrop(i, 64).tobytes() for i in range(12)]
+    assert len(set(renders)) == 12
+
+
+def test_generator_main_writes_pool(tmp_path):
+    gen = _load_generator()
+    rc = gen.main(["--out", str(tmp_path), "--size", "64"])
+    assert rc == 0
+    files = sorted(tmp_path.glob("backdrop-*.jpg"))
+    assert [f.name for f in files] == [f"backdrop-{i:02d}.jpg" for i in range(12)]
+    with Image.open(files[0]) as img:
+        assert img.size == (64, 64) and img.mode == "RGB"
+
+
+def test_committed_pool_present_and_sized():
+    files = sorted((REPO_ROOT / "artwork" / "backdrops").glob("backdrop-*.jpg"))
+    assert len(files) == 12
+    with Image.open(files[0]) as img:
+        assert img.size == (3000, 3000)
