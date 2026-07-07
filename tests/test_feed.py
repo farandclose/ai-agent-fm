@@ -74,3 +74,17 @@ def test_no_artwork_tags_without_cover_url(tmp_path):
     channel = root.find("channel")
     assert channel.find(f"{ITUNES}image") is None
     assert channel.find("image") is None
+
+
+def test_item_artwork_when_cover_key_present(tmp_path):
+    ep = EPISODE | {"cover_key": "episodes/clicky-2026-07-07-engg.jpg"}
+    root = ET.fromstring(publish.generate_feed(make_config(tmp_path), [ep]))
+    img = root.find("channel/item").find(f"{ITUNES}image")
+    assert img.get("href") == (
+        "https://pub-abc.r2.dev/episodes/clicky-2026-07-07-engg.jpg"
+    )
+
+
+def test_item_without_cover_key_omits_image(tmp_path):
+    root = ET.fromstring(publish.generate_feed(make_config(tmp_path), [EPISODE]))
+    assert root.find("channel/item").find(f"{ITUNES}image") is None

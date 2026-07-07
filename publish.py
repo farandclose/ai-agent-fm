@@ -749,7 +749,10 @@ def generate_feed(
     with a stable ``guid`` (``isPermaLink="false"``, the episode id), an
     ``enclosure`` pointing at ``public_base_url/mp3_key`` (byte length and
     ``audio/mpeg`` type), ``itunes:duration`` in seconds, and a ``pubDate`` of
-    the episode date at 06:00:00 UTC in RFC 2822 form. When ``cover_url`` is
+    the episode date at 06:00:00 UTC in RFC 2822 form. An episode whose
+    manifest entry carries a ``cover_key`` also gets an item-level
+    ``itunes:image`` (href ``public_base_url/cover_key``); entries without one
+    are left untouched. When ``cover_url`` is
     given, the channel also carries show artwork as both an ``itunes:image``
     (href attribute) and an RSS ``image`` element (whose title/link mirror the
     channel's own). Returned as a string with an XML declaration.
@@ -793,6 +796,12 @@ def generate_feed(
         ET.SubElement(item, f"{{{_ITUNES_NS}}}duration").text = str(
             ep["duration_secs"]
         )
+        if ep.get("cover_key"):
+            ET.SubElement(
+                item,
+                f"{{{_ITUNES_NS}}}image",
+                {"href": cfg.public_base_url + "/" + ep["cover_key"]},
+            )
 
     return ET.tostring(rss, encoding="unicode", xml_declaration=True)
 
