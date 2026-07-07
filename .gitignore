@@ -1,0 +1,25 @@
+# secrets
+.env
+.ca-bundle.pem
+
+# python
+.venv/
+__pycache__/
+
+# local, user-specific config (copy from agentfm.example.toml)
+agentfm.toml
+
+# generated feed state + audio + per-episode working dirs
+# (episode dirs are mined from private session traces — never publish them)
+feed.xml
+episodes.json
+episodes/
+check-tts.mp3
+
+# internal build/process notes — not part of the public tool
+docs/superpowers/
+docs/ideation/
+
+# harness + OS cruft
+.claude/
+.DS_Store

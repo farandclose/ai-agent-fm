@@ -1,0 +1,29 @@
+# Copy this to `agentfm.toml` and fill in your own values.
+# `agentfm.toml` is gitignored so your settings stay local.
+
+[feed]
+title = "AI Agent FM"
+description = "Podcast episodes about my AI-agent-built projects, generated from code and agent session traces."
+author = "Your Name"                            # shows as the podcast author in apps
+public_base_url = "https://pub-<hash>.r2.dev"   # your R2 bucket's public r2.dev URL (no trailing slash)
+
+[r2]
+bucket = "your-bucket-name"
+
+[tts]
+provider = "elevenlabs"
+model = "gemini-3.1-flash-tts-preview"
+host_voice = "Kore"
+
+[tts.guest_voices]
+engg = "Charon"
+sales = "Puck"
+product = "Fenrir"
+
+[tts.elevenlabs]
+host_voice_id = "aMSt68OGf4xUZAnLpTU8" # Juniper — grounded female professional, great for podcasts
+
+[tts.elevenlabs.guest_voice_ids]
+engg = "pNInz6obpgDQGcFmaJgB"    # Adam — dominant, firm
+sales = "IKne3meq5aSn9XLyUdCD"   # Charlie — deep, confident, energetic
+product = "1SM7GgM6IMuvQlz2BwM3" # Mark — casual, relaxed, light (male; contrasts with female host)
