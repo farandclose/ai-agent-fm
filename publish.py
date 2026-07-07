@@ -12,6 +12,7 @@ import argparse
 import datetime
 import email.utils
 import functools
+import hashlib
 import json
 import math
 import os
@@ -543,6 +544,166 @@ def wav_duration_secs(path: Path) -> int:
     """Return the duration of a WAV file rounded to the nearest second."""
     with wave.open(str(path), "rb") as w:
         return round(w.getnframes() / w.getframerate())
+
+
+# ---------------------------------------------------------------------------
+# Cover art
+#
+# A cover is a 3000x3000 square: a project-locked backdrop overlaid with the
+# episode's project name (dominant) and a muted "AI AGENT FM" show mark. All
+# geometry is expressed relative to the canvas so a future higher-resolution
+# render would only change one constant.
+# ---------------------------------------------------------------------------
+
+_COVER_SIZE = 3000
+# 8% text-free margin on every side. Comfortably inside the hard "nothing in
+# the outer 2%" constraint, so backdrop corners always survive untouched.
+_COVER_MARGIN = round(_COVER_SIZE * 0.08)
+_NEAR_WHITE = (245, 245, 240)  # #F5F5F0 — reads as white without clipping.
+_TITLE_MAX_PT = 340  # Largest title size we try; auto-fit shrinks from here.
+_TITLE_MIN_PT = 72  # Floor so a pathological name still renders something.
+_TITLE_STEP_PT = 8  # Auto-fit granularity.
+_LINE_SPACING = 1.1  # Multiplier on line height for multi-line titles.
+_SHOWMARK_PT = 80
+_SHOWMARK_TRACKING = 14  # Extra px between letters of the show mark.
+_SHOWMARK_ALPHA = 175  # ~69% opacity so the signature reads as muted.
+_SHOWMARK_BOTTOM_FRAC = 0.06  # Baseline sits ~6% up from the bottom edge.
+
+
+def backdrop_index(project: str, pool_size: int) -> int:
+    """Return the index of the backdrop permanently assigned to ``project``.
+
+    The formula is FROZEN: the first 8 bytes of the SHA-256 digest of the
+    UTF-8 project slug, read big-endian, modulo the pool size. It must never
+    use Python's built-in ``hash()`` (which is salted per process and unstable
+    across runs) — this mapping pins each project's visual identity, so the
+    same project always draws the same backdrop across machines and releases.
+    """
+    digest = hashlib.sha256(project.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % pool_size
+
+
+def _wrap_title(words: list[str], font, max_width: int) -> list[str]:
+    """Greedily pack ``words`` into lines no wider than ``max_width``.
+
+    A single word longer than ``max_width`` still occupies its own line rather
+    than being dropped — the caller relies on auto-fit shrinking the font so
+    such a word eventually fits.
+    """
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if not current or font.getlength(candidate) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _fit_title(text: str, font_path: Path, box: int, image_font):
+    """Find the largest title font that fits ``text`` inside a ``box``-px square.
+
+    Returns ``(font, lines, line_height)``. Tries sizes from ``_TITLE_MAX_PT``
+    down to ``_TITLE_MIN_PT``; at each size the text is word-wrapped and
+    accepted once every line fits the width and the stacked block fits the
+    height. Falls back to the minimum size (rendered anyway) if nothing fits.
+    """
+    words = text.split()
+    chosen = None
+    for pt in range(_TITLE_MAX_PT, _TITLE_MIN_PT - 1, -_TITLE_STEP_PT):
+        font = image_font.truetype(str(font_path), pt)
+        lines = _wrap_title(words, font, box)
+        ascent, descent = font.getmetrics()
+        line_height = round((ascent + descent) * _LINE_SPACING)
+        widest = max((font.getlength(line) for line in lines), default=0)
+        block_height = line_height * len(lines)
+        chosen = (font, lines, line_height)
+        if widest <= box and block_height <= box:
+            break
+    return chosen
+
+
+def _draw_tracked(draw, text: str, font, tracking: int, center_x: float, top: int, fill):
+    """Draw ``text`` horizontally centered at ``center_x`` with letter spacing."""
+    widths = [font.getlength(ch) for ch in text]
+    total = sum(widths) + tracking * (len(text) - 1)
+    x = center_x - total / 2
+    for ch, width in zip(text, widths):
+        draw.text((x, top), ch, font=font, fill=fill)
+        x += width + tracking
+
+
+def make_cover(ep: Episode, root: Path) -> Path:
+    """Compose ``ep.dir / "cover.jpg"`` and return its path.
+
+    Picks the project-locked backdrop from ``root/artwork/backdrops``, resizes
+    it to the 3000x3000 canvas, then overlays the episode's ``project_name``
+    (auto-fitted, near-white, centered) and a muted ``AI AGENT FM`` show mark
+    near the bottom. Composition only — no upload or manifest side effects; a
+    future motif layer slots in here.
+
+    Raises ``ConfigError`` if the backdrop pool or the bundled font is missing
+    (both are committed repo assets, not per-episode inputs).
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    pool = sorted((root / "artwork" / "backdrops").glob("backdrop-*.jpg"))
+    if not pool:
+        raise ConfigError(
+            "no cover backdrops found in artwork/backdrops — "
+            "run `uv run artwork/make_backdrops.py` to generate the pool"
+        )
+    font_path = root / "artwork" / "fonts" / "SpaceGrotesk-Bold.ttf"
+    if not font_path.exists():
+        raise ConfigError(f"cover font missing: {font_path} (SpaceGrotesk-Bold.ttf)")
+
+    backdrop_path = pool[backdrop_index(ep.project, len(pool))]
+    canvas = Image.open(backdrop_path).convert("RGB")
+    if canvas.size != (_COVER_SIZE, _COVER_SIZE):
+        canvas = canvas.resize((_COVER_SIZE, _COVER_SIZE), Image.LANCZOS)
+
+    draw = ImageDraw.Draw(canvas)
+    center_x = _COVER_SIZE / 2
+    content = _COVER_SIZE - 2 * _COVER_MARGIN
+
+    # Project name: dominant, auto-fitted, vertically centered.
+    font, lines, line_height = _fit_title(
+        ep.project_name, font_path, content, ImageFont
+    )
+    block_height = line_height * len(lines)
+    y = round((_COVER_SIZE - block_height) / 2)
+    for line in lines:
+        width = font.getlength(line)
+        draw.text((center_x - width / 2, y), line, font=font, fill=_NEAR_WHITE)
+        y += line_height
+
+    # Show mark: muted signature near the bottom, drawn on an alpha overlay so
+    # it blends toward the backdrop rather than sitting as opaque white.
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    mark_font = ImageFont.truetype(str(font_path), _SHOWMARK_PT)
+    mark_ascent, mark_descent = mark_font.getmetrics()
+    mark_top = round(
+        _COVER_SIZE * (1 - _SHOWMARK_BOTTOM_FRAC) - (mark_ascent + mark_descent)
+    )
+    _draw_tracked(
+        odraw,
+        "AI AGENT FM",
+        mark_font,
+        _SHOWMARK_TRACKING,
+        center_x,
+        mark_top,
+        _NEAR_WHITE + (_SHOWMARK_ALPHA,),
+    )
+    canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+
+    cover_path = ep.dir / "cover.jpg"
+    canvas.save(cover_path, "JPEG", quality=90)
+    return cover_path
 
 
 def upsert_manifest(manifest_path: Path, entry: dict) -> list[dict]:
