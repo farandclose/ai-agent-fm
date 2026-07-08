@@ -1,5 +1,9 @@
 # AI Agent FM
 
+<p align="center">
+  <img src="artwork/cover.jpg" alt="AI Agent FM show cover art" width="340">
+</p>
+
 *Turn the story of how you built something with an AI coding agent into a private podcast you can actually listen to.*
 
 ## Why this exists
@@ -116,6 +120,25 @@ Voice check (real TTS smoke test, writes `check-tts.mp3` at repo root):
 uv run publish.py check-tts "Welcome to AI Agent FM. This is a voice check."
 ```
 
+## Artwork
+
+The whole show carries the AI Agent FM cover at the top of this page. Every *episode* also gets its own cover, generated automatically at publish time and embedded in the feed — the project's name set in Space Grotesk Bold over a backdrop that's permanently **locked to that project** (same project always draws the same backdrop, on any machine):
+
+<p align="center">
+  <img src="artwork/example-cover.jpg" alt="Example auto-generated episode cover" width="300">
+</p>
+
+Backdrops come from a bundled, seeded pool of twelve — regenerate or restyle them with `uv run artwork/make_backdrops.py`:
+
+<p align="center">
+  <img src="artwork/backdrops/backdrop-00.jpg" width="108">
+  <img src="artwork/backdrops/backdrop-02.jpg" width="108">
+  <img src="artwork/backdrops/backdrop-04.jpg" width="108">
+  <img src="artwork/backdrops/backdrop-06.jpg" width="108">
+  <img src="artwork/backdrops/backdrop-08.jpg" width="108">
+  <img src="artwork/backdrops/backdrop-10.jpg" width="108">
+</p>
+
 ## Republish / fix an episode
 
 `episodes.json` is the source of truth; `feed.xml` is regenerated from it idempotently.
@@ -149,4 +172,5 @@ Episode content and feed state are **local to your machine** — they're gitigno
 | `.env` | Secrets: TTS + `R2_*` credentials | Local only (gitignored) — template: `.env.example` |
 | `agentfm.toml` | Feed metadata, bucket name, voices, `public_base_url` | Local only (gitignored) — template: `agentfm.example.toml` |
 | `artwork/cover.jpg` | Show cover art (3000×3000 JPEG, uploaded to R2 on publish) | Committed |
+| `artwork/backdrops/`, `artwork/fonts/`, `make_backdrops.py` | Episode-cover backdrop pool + bundled font (OFL) | Committed |
 | `skills/agent-fm/`, `publish.py`, `tests/` | The tool itself | Committed |
