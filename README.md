@@ -1,24 +1,40 @@
 # AI Agent FM
 
-Turns a project you built with an AI coding agent into a private podcast episode: a host interviews a persona (Engineering Lead, Sales/Marketing, or Product) about *your* project, grounded in the Claude Code **session traces** — the decisions, dead ends, and reversals from building it, not just the finished code. You subscribe in a normal podcast app and hear a third-person take on your own work on a walk.
+*Turn the story of how you built something with an AI coding agent into a private podcast you can actually listen to.*
+
+## Why this exists
+
+When you build a project with an AI coding agent, the finished code is just the residue. The real story — the dead ends, the midnight reversal when you tore out the auth layer, the bug that ate an afternoon, the moment you realized you were solving the wrong problem — is recorded, turn by turn, in your Claude Code **session traces**. And then it's gone. Nobody ever reads a trace back.
+
+AI Agent FM mines those traces and turns them into a podcast episode. An outside host interviews *you* — a version of you reconstructed from your own traces — about what you were trying to do, what it cost, and what almost went wrong. You subscribe in a normal podcast app, and on a walk you hear a third-person take on your own work: not a changelog, a story, with tension and surprises, about a project you know intimately.
+
+It's part keepsake, part review, part genuinely fun. Hearing your own build narrated back has a way of surfacing the decisions you rushed past and the things you actually learned.
+
+You pick the angle, and the host presses from there:
+
+- **Engineering** — how it's built, the tradeoffs, what's fragile, what was clever.
+- **Product** — who it's for, what to cut, what's next, where scope got away from you.
+- **Sales / Marketing** — who'd pay, the one-line pitch, the objections, the competition.
+
+## How it works
 
 ```
 ┌─ Claude Code skill: /agent-fm <lens> ──────────────────────┐
 │  run inside any target project                              │
 │  1. locate session traces (~/.claude/projects/<enc>/*.jsonl)│
 │  2. write DOSSIER  (markdown brief, trace-first)            │
-│  3. write SCRIPT   (host + persona dialogue, script.json)   │
+│  3. write SCRIPT   (host + guest dialogue, script.json)     │
 │  4. invoke publish.py                                        │
 └─────────────────────────────────────────────────────────────┘
 ┌─ publish.py (Python, lives in ai-agent-fm) ────────────────┐
 │  script.json → TTS (2 voices) → mp3 → upload → feed.xml     │
 └─────────────────────────────────────────────────────────────┘
 ┌─ Cloudflare R2 bucket ─────────────────────────────────────┐
-│  episodes/*.mp3 + feed.xml  ← podcast app polls             │
+│  episodes/*.mp3 + feed.xml  ← your podcast app polls        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The skill does all the judgment work (trace mining, storytelling); `publish.py` does only the mechanical work (audio, upload, feed). To improve episode quality you edit the skill prompts, never the code.
+The `/agent-fm` skill does all the judgment work — mining traces, deciding what's a story, writing the dialogue. `publish.py` does only the mechanical work — audio, upload, feed. To improve episode quality you edit the skill's prompts, never the Python.
 
 ## Prerequisites
 
@@ -30,15 +46,15 @@ The skill does all the judgment work (trace mining, storytelling); `publish.py` 
 
 Everything below is done once. Secrets live only in `.env` (gitignored) — never commit or paste real credential values anywhere else.
 
-1. **Cloudflare R2 bucket.** In the Cloudflare dashboard: R2 → Create bucket named `agent-fm` (location: automatic).
+1. **Cloudflare R2 bucket.** In the Cloudflare dashboard: R2 → Create bucket (any name, e.g. `my-podcast`; location: automatic).
 2. **Public URL.** Bucket → Settings → Public access → **Enable r2.dev subdomain**. Copy the `https://pub-<hash>.r2.dev` URL it gives you.
-3. **API token.** R2 → Manage API tokens → Create token with **Object Read & Write** scoped to the `agent-fm` bucket. Copy the account ID, access key ID, and secret.
-4. **Gemini key.** Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
-5. **Fill secrets.** Copy the env template and fill in the four values from steps 3–4:
+3. **API token.** R2 → Manage API tokens → Create token with **Object Read & Write** scoped to that bucket. Copy the account ID, access key ID, and secret.
+4. **Gemini key.** Get an API key from [Google AI Studio](https://aistudio.google.com/apikey) (only needed if you use the Gemini TTS provider — see below).
+5. **Fill secrets.** Copy the env template and fill in your credentials:
    ```bash
    cp .env.example .env
    ```
-   Then edit `.env` and set `GEMINI_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
+   Then edit `.env` and set `ELEVENLABS_API_KEY` (or `GEMINI_API_KEY`), plus `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`.
 6. **Fill feed config.** Copy the config template and set your own values:
    ```bash
    cp agentfm.example.toml agentfm.toml
@@ -122,17 +138,15 @@ Republish requires the episode's `episode.mp3` and `audio_meta.json` to still ex
 
 ## Artifact map
 
-| Path | What it is | Committed? |
+Episode content and feed state are **local to your machine** — they're gitignored so your private projects never end up in this repo. The repo ships the tool and templates only.
+
+| Path | What it is | In git? |
 |---|---|---|
-| `episodes/<ep>/dossier.md`, `script.json`, `episode.json` | Per-episode research, dialogue, and metadata | Committed |
-| `episodes/<ep>/episode.mp3`, `.wav` | Synthesized audio | Gitignored |
-| `episodes.json` | Manifest — source of truth for the feed | Committed |
-| `feed.xml` | Generated RSS 2.0 feed (regenerated from the manifest) | Gitignored |
-| `agentfm.toml` | Feed metadata, bucket name, voices, `public_base_url` | Committed |
+| `episodes/<ep>/dossier.md`, `script.json`, `episode.json` | Per-episode research, dialogue, and metadata | Local only (gitignored) |
+| `episodes/<ep>/episode.mp3`, `.wav` | Synthesized audio | Local only (gitignored) |
+| `episodes.json` | Manifest — source of truth for your feed | Local only (gitignored) |
+| `feed.xml` | Generated RSS 2.0 feed (regenerated from the manifest) | Local only (gitignored) |
+| `.env` | Secrets: TTS + `R2_*` credentials | Local only (gitignored) — template: `.env.example` |
+| `agentfm.toml` | Feed metadata, bucket name, voices, `public_base_url` | Local only (gitignored) — template: `agentfm.example.toml` |
 | `artwork/cover.jpg` | Show cover art (3000×3000 JPEG, uploaded to R2 on publish) | Committed |
-| `.env` | Secrets: `GEMINI_API_KEY`, `R2_*` credentials | Gitignored |
-
-## Docs
-
-- **Design spec:** [`docs/superpowers/specs/2026-07-07-agent-fm-mvp-design.md`](docs/superpowers/specs/2026-07-07-agent-fm-mvp-design.md) — problem, scope decisions, architecture, error handling.
-- **Implementation plan:** [`docs/superpowers/plans/2026-07-07-agent-fm-mvp.md`](docs/superpowers/plans/2026-07-07-agent-fm-mvp.md) — task-by-task build breakdown.
+| `skills/agent-fm/`, `publish.py`, `tests/` | The tool itself | Committed |
