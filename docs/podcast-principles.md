@@ -1,228 +1,329 @@
-# What makes an episode memorable — principles
+# What makes an episode connect — principles
 
-Research-backed principles for AI Agent FM episodes. Synthesized 2026-07-07
-from three research passes: narrative audio craft (Ira Glass, Jessica Abel's
-*Out on the Wire*, Alex Blumberg, Radiolab), interview/conversation
-authenticity (Terry Gross, Larry King, Marc Maron, Acquired, conversation
-analysis, parasocial research), and the cognitive science of memorability
-(narrative memory meta-analyses, peak-end rule, transportation theory,
-information-gap theory, cognitive load in listening).
+This is the taste document for AI Agent FM. The `/agent-fm` pipeline
+(SKILL.md, the personas, the quality rubric) writes episodes by these
+principles, and the builder reads this file to check the show's taste —
+so it is written for both: plain English, every term of craft defined
+where it first appears, research citations at the bottom.
 
-These principles govern the `/agent-fm` pipeline (SKILL.md, personas, the
-quality rubric). When a rubric rule and a principle conflict, the principle
-wins and the rubric is wrong.
+When a rubric rule and a principle conflict, the principle wins and the
+rubric is wrong.
 
-The one-line synthesis: **connection comes from unresolved motion, not
-resolved insight.** A listener bonds to a person who wants something and
-might not get it — not to a stream of quotable conclusions.
+## The north star
 
----
+An episode should sound like the best long-form conversation shows — Lex
+Fridman, The Knowledge Project, a16z: two smart people talking, one of
+whom did the work, going deep enough that you hear how the builder
+actually thinks. It should not sound like produced narrative radio (This
+American Life, Radiolab), where a host reads beautifully written copy
+over an engineered arc.
 
-## 1. An episode is a story about a person, and the story is written first
+We still engineer the arc. But all the engineering happens on the
+writer's side — in what gets asked, kept, cut, and ordered — never in how
+anyone talks. On-mic, nobody sounds like they're executing a plan.
+**Structure is felt, never heard.**
 
-Before any script: write the **focus sentence** — *"Someone does something,
-because ___, but ___."* (Jessica Abel / Rob Rosenthal). The "because" is a
-personal, burning motivation; the "but" is the obstacle that makes the
-outcome genuinely uncertain. If the focus sentence has no because and no
-but, you have a *topic*, not a story — and topics produce aphorism-strings.
-
-Alongside it, write the **episode objective**: one sentence on what the
-listener should *feel* and one thing they should *remember* a week later.
-Every later editorial decision is checked against these two lines.
-
-Test the hook with Blumberg's XY formula: "I'm doing a story about X, and
-what's interesting is Y" — where Y must be surprising and specific to a
-person, never thematic.
-
-## 2. The person before the idea
-
-Radiolab deliberately delays the concept until the listener has bonded with
-a character; transportation research (Green & Brock) says audiences enter a
-story only through **identification** — a character with goals, stakes, and
-visible vulnerability. A flawless narrator is un-enterable.
-
-Rule: **no thesis before the listener knows what the builder wanted and
-what it would cost them to fail.** The builder must be *in* the episode as
-a first-person presence with their own recorded words — not a third-person
-character two commentators discuss.
-
-## 3. Anecdote → reflection, alternating — never reflection alone
-
-Ira Glass's two building blocks: the anecdote ("this happened, and that led
-to this next thing") and the moment of reflection ("here's why you're
-listening"). A good story flips between them constantly. A script that is
-all reflection — all point-making, all insight — is exactly half a story:
-nothing is *happening*, so the insights have nothing to land on.
-
-Lint check (Brian Reed, This American Life): every segment needs **action,
-reflection, and stakes**. Our failure mode is reflection at 100% and the
-other two near zero.
-
-## 4. Concrete beats abstract, scenes beat opinions
-
-Audio has no visuals — "all you have is words" (Blumberg) — and concrete,
-imageable detail is encoded twice (verbally + visually, Paivio's
-dual-coding) while abstraction gets one route. The host's core function is
-extracting scenes: "tell me about the moment when…", "what was one side of
-the debate in your head saying? what was the other side saying?", "was
-there ever a point you weren't confident?" A guest who says "noise matters"
-is a theorist; a guest who says "it fired on a twelve-character prompt at
-eleven at night and I thought, I built a spam machine" is a character.
-
-## 5. Open loops early; never close them instantly
-
-Curiosity is an information gap (Loewenstein): a sharp, bounded question
-raised and *deferred*. Glass: "constantly raise questions and answer them"
-— with distance between the raise and the answer. The generation effect:
-an answer the listener half-predicts sticks far better than one delivered
-cold — let the host venture a guess and be wrong.
-
-Aphorisms are loop-closers. A punchline every line means zero open loops
-at any moment, which means zero forward pull. **Delete half the
-punchlines.**
-
-## 6. Shape the episode as a curve — one or two peaks, a protected ending
-
-Peak-end rule (Kahneman et al.): experiences are remembered by their most
-intense moment and their ending, near-independent of length. Von Restorff:
-distinctiveness is *relational* — a moment stands out only against a
-plainer surround. Uniform brilliance is self-erasing.
-
-Rule: engineer **one or two** emotional peaks per episode and protect the
-final 60–90 seconds. Let the middle breathe with lower-intensity connective
-tissue. If everything is a peak, nothing is.
-
-## 7. Air is a feature, not waste
-
-Speech is transient — no re-reading — so dense audio overloads working
-memory and loses the listener (transient-information effect). The
-deliberately *unquotable* lines are load-bearing: signposts ("okay, hold
-that thought — this matters in a minute"), the host paraphrasing the guest
-in plainer words (a second encoding, not filler), backchannels, one idea
-per turn. Radiolab signposts "all over the place." A script with no lines
-whose only job is holding the listener's hand has no air.
-
-And leave gaps for the listener to complete (Jad Abumrad: "you're holding
-the brush… if I do my job right, *you* finish the sentence"). Co-authorship
-is where connection forms; wall-to-wall polish leaves the listener nothing
-to do.
-
-## 8. Listening must be audible: follow the answer, not the outline
-
-Larry King: "I hate interviewers who come with a long list of prepared
-questions… I've never not followed up." Terry Gross preps everything, then
-treats prep as a floor: when a guest discloses something real, she
-*acknowledges it before moving on* — never pivots straight past an
-emotional beat to the next agenda item.
-
-Rules: a large share of host turns must be reactive follow-ups that pick up
-a specific word the guest just used; the prepared question order visibly
-bends at least once per episode; every disclosure gets an acknowledgment
-beat before a topic change. The conversation recalibrates as it goes — the
-agenda serves the answers, not the reverse.
-
-## 9. Information asymmetry must pay off on-mic
-
-Acquired's craft lesson: they used to pool research in one shared doc and
-the episodes went stale — "no surprise." Now they deliberately *don't
-share* research so they can genuinely surprise each other while recording.
-Our dossier/host-brief split has the right bones, but asymmetry that's
-merely written into one script is performed, not real. Discovery has to
-happen *during* the conversation: the host audibly caught off guard by a
-dossier fact, the guest caught by a brief fact, at least one speaker
-updating their view on-mic ("huh — I'd assumed the opposite").
-
-## 10. Imperfection and confession are the bonding agents
-
-Parasocial research on podcasts (Schlütz & Hedder 2021 and successors):
-self-disclosure and spontaneity markers — imperfection, confessions,
-hesitation, self-repair — are what create the feeling of *knowing* a host.
-Disfluency studies: listeners read fillers, restarts, and repairs as
-"genuine" and "human." The Maron/Stern mechanic: the host risks something
-first (a doubt, a failure, a bias), and that's what licenses the guest's
-candor.
-
-Rules: the host self-discloses early; the guest hesitates and self-repairs
-when reaching for hard memories (not when stating facts); not every
-exchange lands; at least one thought goes unfinished; one topic drifts and
-returns. These are features. Polishing them out removes the thing
-listeners bond to.
-
-## 11. Orientation debt: a cold open borrows, the billboard repays
-
-A cold open is a loan of confusion — dropping the listener mid-story is
-allowed (and good) precisely because a **billboard** a few exchanges later
-repays the debt in full (the This American Life structure: cold open →
-host billboard). Repaid in full means: within the first ~4 exchanges the
-listener has the show, who's speaking, and what the product actually
-*does* — one plain mechanical sentence (what it watches, what it says
-back), not just the mission. And every recurring product noun (a feature
-name like "the coach" or "the creature") is defined at first mention or
-in the billboard: the writer always knows what the noun means, so only a
-cold reader can feel it missing.
-
-Test: a third person stopped at the 20% mark can say who is talking and
-what the product does. If they can only repeat the mission statement, the
-debt is unpaid.
+And one sentence sits under everything else: **connection comes from
+unresolved motion, not resolved insight.** A listener bonds to a person
+who wants something and might not get it — not to a stream of quotable
+conclusions.
 
 ---
 
-## The composite shape
+## Part 1 — The story (engineered before anyone speaks)
 
-1. **Spine:** one focus sentence with a real because and but; the builder
-   as first-person protagonist with goals, stakes, vulnerability (§1, §2).
-2. **Engine:** anecdote → reflection alternation; scenes and concrete
-   detail over conclusions (§3, §4).
-3. **Pull:** open loops early, defer answers, let the host guess wrong
-   (§5).
-4. **Shape:** 1–2 peaks, plain connective middle, protected ending (§6).
-5. **Surface:** air, signposts, paraphrase, gaps the listener completes
-   (§7); audible listening and recalibration (§8); real on-mic surprise
-   (§9); imperfection left in (§10); orientation debt repaid on time
-   (§11).
+### 1. It's a story about a person, and the story is written first
 
-## Anti-patterns (each caused a real failure in our episodes)
+Before any script, write the **focus sentence**: "Someone does something,
+because ___, but ___." The *because* is a personal, burning motivation;
+the *but* is the obstacle that makes the outcome genuinely uncertain. If
+you can't fill in both, you have a topic, not a story — and topics
+produce strings of conclusions nobody remembers.
+
+Alongside it, write the **episode objective**: one line for what the
+listener should feel at the end, one line for the single thing they
+should remember a week later. Every later editorial decision is checked
+against those two lines.
+
+Test the hook by completing: "This is a story about X, and what's
+interesting is Y" — where Y is surprising and specific to a person,
+never a theme.
+
+### 2. The person before the idea
+
+Listeners enter a story through a person — someone with a goal, stakes,
+and visible weakness. A flawless narrator gives them no way in. So: no
+thesis before the listener knows what the builder wanted and what failure
+would cost them. And the builder must be *in* the episode — first person,
+their own recorded words — never a character two commentators discuss.
+
+### 3. Something must happen
+
+Good episodes alternate two blocks: the anecdote ("this happened, then
+that happened") and the reflection ("here's what it meant"). A script
+that is all reflection — all point-making, all insight — is half a story:
+nothing is happening, so the insights have nothing to land on. Every
+stretch of the episode needs action, reflection, and stakes.
+
+### 4. Scenes beat opinions
+
+Audio has no visuals; the words carry everything, and concrete, imageable
+detail is what sticks. The host's core job is extracting scenes: "take me
+to the moment…", "what was one side of the debate in your head saying —
+and the other?", "was there a point you weren't confident?" A guest who
+says "noise matters" is a theorist; a guest who says "it fired on a
+twelve-character prompt at eleven at night and I thought, I built a spam
+machine" is a person.
+
+### 5. Depth is reasoning made audible
+
+What makes the north-star shows feel deep is time spent *inside* the
+guest's deliberation: what they were afraid of, what alternatives they
+weighed, why they acted when they did, what would have changed their
+mind. A decision delivered as an event — "I typed X, the answer came
+back, I killed it the same day" — is dramatic and empty. The listener
+came to peek inside a builder's head; the why-chain is the payload. For
+every pivotal moment the episode keeps, the guest walks the reasoning,
+and the host's best follow-up is some form of "what were you weighing?"
+
+## Part 2 — The pull (why a listener keeps listening)
+
+### 6. Open questions early; never answer them instantly
+
+Curiosity is the gap between what the listener knows and what they want
+to know. An **open loop** is a sharp question raised now and answered
+later — with real distance between the two. Let the host sometimes
+venture a guess and be wrong before the reveal: a half-predicted answer
+sticks far better than one delivered cold.
+
+Punchlines are loop-closers: a neat aphorism resolves the moment and
+kills the pull. If every line is quotable, no question is ever open.
+Delete half the punchlines.
+
+### 7. One or two peaks, and a protected ending
+
+People remember an experience by its most intense moment and by how it
+ends — almost regardless of everything in between. So build **one or
+two** peaks per episode, keep the connective middle deliberately plainer,
+and protect the final minute: land it on the focus sentence's unresolved
+*but*, and never cram anything after the close. If everything is a peak,
+nothing is.
+
+A peak is a moment of *substance* — a confession, a live realization, a
+question the guest can't answer. Never a prose effect: intensity
+manufactured in the sentence rhythm (staccato fragments, echoed phrases,
+a placed ellipsis) is the writer performing drama the conversation
+doesn't have, and it reads as fiction (see #14).
+
+### 8. Air is load-bearing
+
+Speech can't be re-read, so a dense episode overloads the ear and loses
+the listener. The deliberately unquotable lines do the carrying:
+**signposts** (a line whose only job is to say where the conversation is
+going — "okay, I want to ask about the pilot"), the host **paraphrasing**
+the guest's point in plainer words (a second pass for the ear, not
+filler), and **backchannels** (the small acknowledgment noises — "right",
+"hm"). One idea per turn.
+
+And leave gaps for the listener to complete. If the writing does
+everything, the listener has nothing to do — and doing is where
+connection forms.
+
+### 9. A cold open borrows confusion; the billboard repays it
+
+A **cold open** — starting mid-story before any introductions — is a
+loan: the listener tolerates confusion because the **billboard** (the few
+lines that orient them) repays it a few exchanges later. Repaid in full
+means: within the first ~4 exchanges the listener has the show, who's
+speaking, what the product actually does — one plain mechanical sentence
+(what it watches, what it says back), not just the mission — and why
+anyone should care, best in the builder's own words ("give me the version
+you'd tell an engineer in the elevator"). The cold open itself is a real
+question the host asks the guest, never a dramatized monologue read at
+the listener.
+
+Every recurring product noun (a feature name like "the coach") is defined
+at or before first use. The writer always knows what the noun means; only
+a cold listener can feel it missing.
+
+Test: someone who stops listening at the 20% mark can say who was talking
+and what the product does. If all they can repeat is the mission
+statement, the debt is unpaid.
+
+## Part 3 — The conversation (how the two voices behave)
+
+### 10. Listening must be audible
+
+Follow the answer, not the outline. Most host questions should pick up a
+specific word the guest just used; the prepared agenda visibly bends at
+least once per episode (a chase, a drift that returns). And when the
+guest discloses something real, the host acknowledges it before moving
+on — never straight past an emotional beat to the next agenda item.
+
+### 11. Surprise must happen on-mic
+
+The guest knows the inside story; the host brings outside research. That
+asymmetry is only worth anything if discovery happens *during* the
+conversation: the host genuinely caught off guard by something the guest
+reveals, the guest genuinely surprised by a fact from the host's
+homework, and at least one of them audibly updating their view ("huh —
+I'd assumed the opposite"). Research pooled in advance produces performed
+surprise, and the ear can tell.
+
+### 12. Imperfection is the bonding agent
+
+Hesitation, restarts, self-repair, confessions, thoughts that don't quite
+land — these are what make a voice feel like a person rather than a
+script. The host risks something first (a bias, a wrong expectation
+brought into the room); that's what licenses the guest's candor. The
+guest hesitates when reaching for a hard memory — never when stating a
+plain fact, and never as a placed dramatic beat: imperfection only reads
+as real where it's unremarkable. Not every exchange lands, at least one
+thought goes unfinished, and that is the point.
+
+### 13. The host is a facilitator, not a performer
+
+Lex Fridman's opener for a five-hour episode: "Let's start with a big
+idea of scaling laws and the scaling hypothesis. What is it? What is its
+history, and where do we stand today?" Shane Parrish: "Are there any
+particular stories that you remember about working with him that bring a
+smile to your face?" Plain, warm, short, zero performance. The show's
+energy comes from the guest's thinking; the host's job is to make it
+audible.
+
+- **One move per turn.** An acknowledgment beat plus one question is the
+  maximum. Never inference + confession + challenge stacked in one
+  breath — the ear can't parse it.
+- **Plain vocabulary.** No drama lexicon — kill, murder, autopsy,
+  dissect, wound, scar as host words. "You walked away from it the same
+  day it shipped — why?" does the same work.
+- **Callbacks happen unannounced.** The host just returns to the thread.
+  "Hold that thought — that's my next segment" and "as promised" are a
+  rundown read on-mic; at most one soft, human deferral per episode ("I
+  want to come back to that").
+- **The close is a question, not a format.** No "rapid-fire round" —
+  that's produced-radio furniture.
+
+## Part 4 — The voice (what the words sound like)
+
+### 14. Write speech, not prose
+
+Verbatim transcripts of the north-star shows agree on a texture that is
+nearly the inverse of good writing:
+
+- **Past tense by default.** Dario Amodei, on Lex: "I first joined the AI
+  world when I was working at Baidu with Andrew Ng in late 2014, which is
+  almost exactly 10 years ago now." Slipping into the present tense for
+  one vivid scene ("so I'm sitting there and it tells me…") is real
+  speech — but for one scene at most, entered and left naturally, and
+  never date-stamped: "it's June 27th, I'm mid-session" is a screenplay
+  slugline.
+- **Relative time, round numbers.** Real speakers anchor time to now
+  ("about 10 years"; Kahneman: "like 63 years ago") and round their
+  counts ("about a hundred sessions", "seventy-odd tests"). Precise
+  figures sound like a database read-out, and the listener can't retain
+  them anyway. At most one precise number per episode, kept for when the
+  precision itself is the point.
+- **Long, additive sentences.** Spontaneous expert speech chains clauses
+  with and-so-because and hedges constantly: "I think", "sort of",
+  "probably", "right?". Short chiseled fragments — "It was right. That's
+  the weird part." — are written drama. Spoken sentences run longer and
+  looser than good writing, not shorter and tighter.
+- **Repetition is natural; elegant variation is a writing tell.** Amodei:
+  "almost like a chemical reaction, you have three ingredients in the
+  chemical reaction and you need to linearly scale up the three
+  ingredients" — the same nouns three times, and it sounds fine. A script
+  that rotates synonyms ("the kill… the demotion… what died was the
+  strategy line") was written, not said — and essay metaphors don't
+  survive being spoken.
+- **Stumbles land on retrieval, not on drama.** Kahneman's real stumble —
+  "setting up an interviewing system for for the army" — sits mid-way
+  through a mundane clause. A hesitation placed at the emotional peak
+  ("I felt... nothing") is an authenticity marker used as a beat: acting,
+  not speech. Scatter imperfection where memory works hard; keep it
+  unremarkable.
+
+---
+
+## The shape of a finished episode
+
+1. **Spine:** a focus sentence with a real because and but; the builder
+   as first-person protagonist with goals, stakes, weakness (#1, #2).
+2. **Engine:** action alternating with reflection; scenes and reasoning
+   over conclusions (#3, #4, #5).
+3. **Pull:** loops opened early and answered late; one or two peaks of
+   substance; a protected ending (#6, #7).
+4. **Surface:** air, signposts, paraphrase, gaps left for the listener
+   (#8); orientation debt repaid on time (#9).
+5. **Conversation:** audible listening, real surprise, imperfection left
+   in, a facilitator host (#10–#13).
+6. **Voice:** speech, not prose (#14).
+
+## Anti-patterns (each one caused a real failure in our episodes)
 
 - **The aphorism string** — every line quotable, zero anecdote, zero air
-  (violates §3, §5, §6, §7).
-- **The absent protagonist** — the builder as "he/him," discussed by two
-  synthetic commentators; no one to identify with (violates §2).
+  (#3, #6, #7, #8).
+- **The absent protagonist** — the builder as "he/him", discussed by two
+  synthetic commentators; no one to identify with (#2).
 - **The undefeatable guest** — every hard question absorbed and converted
-  to a win within one line; no doubt, nothing left conceded (violates §10).
-- **Goodhart's rubric** — counting handoffs and self-corrections
-  manufactures tics ("exactly one self-correction" produces exactly one,
-  in the wrong place); mechanical counts cannot measure story (violates
-  §1–§6; the counts must serve the principles, not replace them).
-- **Budget stuffing** — carrying a full structural agenda into a ~750-word
-  budget, so every line is payload (violates §6, §7). Fewer ideas, not
-  shorter air.
-- **Unpaid orientation debt** — a cold open whose confusion is never fully
-  repaid: the billboard names the mission but not the mechanics, and a
-  feature noun ("my own coach") goes undefined for half the episode
-  (violates §7, §11).
+  to a win within one line; nothing conceded (#12).
+- **Goodhart's rubric** — scoring mechanical counts ("exactly one
+  self-correction") manufactures tics in the wrong places; counts can
+  guard principles, never replace them (#1–#7).
+- **Budget stuffing** — carrying a full agenda into a short episode so
+  every line is payload; fewer ideas, never less air (#7, #8).
+- **Unpaid orientation debt** — a cold open whose confusion never gets
+  fully repaid: mission named, mechanics missing, feature nouns undefined
+  (#8, #9).
+- **The screenplay scene** — present tense + calendar date + precise
+  counts ("it's June 27th, I'm mid-session… a hundred and twenty of my
+  sessions"): recall staged as drama (#14).
+- **Performed authenticity** — hesitations, "so yeah", and ellipses
+  placed at peaks as beats (#12, #14).
+- **Announced structure** — "hold onto it, I'm coming back to it",
+  "that's my next segment", "as promised", "rapid-fire close" (#13).
+- **The drama lexicon** — murdered / dissect / autopsy / mercy killing as
+  host vocabulary; the substance carries the drama or nothing does
+  (#7, #13).
+- **The stacked host turn** — inference + bias confession + challenge in
+  one breath; unparseable by ear (#8, #13).
+- **The beat sheet** — pivotal decisions delivered as event + outcome
+  with no deliberation between them (#5).
 
-## Sources (primary)
+## Evidence
 
-- Ira Glass on storytelling (anecdote + reflection, bait, taste gap) —
-  This American Life craft talks.
-- Jessica Abel, *Out on the Wire* — focus sentence, XY formula,
-  signposting (with Rob Rosenthal, Alex Blumberg, Radiolab).
-- Alex Blumberg, Gimlet Academy — moment-questions, specifics, stakes.
-- Jad Abumrad — listener as co-author.
-- Terry Gross / Larry King / Marc Maron / Howard Stern — follow the
-  answer; acknowledgment beats; reciprocal vulnerability.
-- Acquired (Gilbert & Rosenthal) — divided research → on-mic surprise.
-- Mar et al. 2021 meta-analysis — narrative memory advantage (g ≈ .72 for
-  memory). (Note: the "stories are 22× more memorable" line often pinned
-  on Bruner is a myth; don't cite it.)
-- Kahneman et al. 1993 — peak-end rule; Cahill & McGaugh — arousal and
-  memory consolidation.
-- Paivio — dual-coding / concreteness effect.
-- Green & Brock 2000 — transportation; Cohen 2001 — identification.
-- Slamecka & Graf 1978 — generation effect; Loewenstein 1994 —
-  information-gap curiosity.
-- Sweller / Leahy — transient-information effect (audio cognitive load).
-- Von Restorff 1933; Hunt 2013 — distinctiveness is relational.
-- Schlütz & Hedder 2021 — podcast parasocial bonds via self-disclosure
-  and speech style; arXiv 2309.15656 — backchannels are the biggest gap
-  between scripted and spontaneous dialogue.
+Synthesized 2026-07-07 from research on narrative audio craft, interview
+authenticity, and the cognitive science of memory; the voice rules (#14)
+derived 2026-07-08 from verbatim transcripts of the north-star shows.
+Primary sources:
+
+- Ira Glass (This American Life craft talks) — anecdote + reflection
+  building blocks; raise questions and answer them.
+- Jessica Abel, *Out on the Wire* — focus sentence, XY hook, signposting
+  (with Rob Rosenthal, Alex Blumberg, Radiolab).
+- Alex Blumberg (Gimlet Academy) — moment-questions, specifics, stakes;
+  "all you have is words".
+- Jad Abumrad (Radiolab) — the listener finishes the sentence;
+  co-authorship is where connection forms.
+- Terry Gross, Larry King, Marc Maron, Howard Stern — follow the answer;
+  acknowledgment beats; the host risks something first.
+- Acquired (Gilbert & Rosenthal) — stopped pooling research so surprise
+  could happen on-mic.
+- Texture references: Lex Fridman #452 (Amodei / Askell / Olah),
+  lexfridman.com/dario-amodei-transcript; The Knowledge Project #68
+  (Kahneman, via the public Happy Scribe transcript). Genre note: Glass /
+  Abel / Radiolab inform the writer-side story craft above; the on-mic
+  register comes from these conversation shows.
+- Cognitive science: Kahneman et al. 1993 — peak-end rule (#7); Mar et
+  al. 2021 meta-analysis — narrative memory advantage (the "stories are
+  22× more memorable" line often pinned on Bruner is a myth; don't cite
+  it); Paivio — dual-coding, concrete detail encodes twice (#4); Green &
+  Brock 2000 and Cohen 2001 — audiences enter stories through
+  identification with a character (#2); Loewenstein 1994 — curiosity as
+  information gap (#6); Slamecka & Graf 1978 — generation effect,
+  half-predicted answers stick (#6); Sweller / Leahy — transient-
+  information effect, dense audio overloads working memory (#8); Von
+  Restorff 1933 / Hunt 2013 — distinctiveness is relational (#7);
+  Schlütz & Hedder 2021 — podcast parasocial bonds via self-disclosure
+  and speech style (#12); arXiv 2309.15656 — backchannels are the
+  biggest gap between scripted and spontaneous dialogue (#8).

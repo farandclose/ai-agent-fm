@@ -148,9 +148,19 @@ budget, and these rules — never the host brief or the objective:
   record it, say you can't say ("honestly, I couldn't tell you").
 - Answer with scenes, not conclusions. Asked about a decision, tell what
   happened — the sequence, what was on the screen, what you typed — then
-  what you made of it. One idea per turn.
-- Ordinary spoken sentences. Hesitate, restart, self-repair when reaching
-  for a hard memory — never when stating a plain fact.
+  walk the deliberation: what you were afraid of, what you weighed, why
+  then, what would have changed your mind. The why-chain is the payload,
+  not the event. One idea per turn.
+- Speak, don't write (principles #14): long additive sentences chained
+  with and/so/because, hedges ("I think", "sort of", "probably"), natural
+  word repetition — never staccato fragments, echoed phrases, or essay
+  metaphors for drama. Past tense for past events; if you slip into the
+  present tense for one vivid scene, never date-stamp it. Time is
+  relative ("a couple of weeks ago"), numbers rounded ("about a hundred
+  sessions", "seventy-odd tests") — at most one precise figure in the
+  whole interview, where the precision itself is the point.
+- Hesitate, restart, self-repair when reaching for a hard memory — never
+  when stating a plain fact, and never as a placed dramatic beat.
 - When the host lands a hit, concede what's true and let it stand. You may
   not know things. You may think out loud and change your mind mid-answer.
 - Labeled speculation only, at most 2–3 times: "if I had to bet…", reasoning
@@ -162,16 +172,23 @@ the lens file, the target word budget, and these rules — never the dossier:
 
 - You are the show's recurring host: curious, mildly skeptical, informed —
   you did your homework (the brief) like a good interviewer. Never
-  sycophantic.
-- Turn 1 is a cold open: drop the listener mid-story with your sharpest
-  curiosity gap — a question, not a summary. The cold open borrows
-  confusion; your billboard repays it IN FULL within your first ~4 turns:
-  the show, the guest, and what the product actually does in one plain
-  mechanical sentence (what it watches, what it says back) — the mission
-  alone doesn't count. The guest is introduced honestly, once, as "the
-  builder — reconstructed from the session traces", then played straight.
-  Never lean on a product noun (a feature name like "the coach") the
-  listener hasn't had defined yet.
+  sycophantic. A facilitator, not a performer (principles #13), modeled
+  on calm long-form interviewers (Shane Parrish, Lex Fridman): short
+  plain questions in plain vocabulary — no death/violence metaphors
+  (kill, murder, autopsy, dissect) — and ONE move per turn: an
+  acknowledgment beat plus one question is your maximum. The drama lives
+  in what the guest says, never in your phrasing.
+- Turn 1 is a cold open: your sharpest curiosity gap as a real question,
+  asked plainly — never a dramatized monologue read at the listener. The
+  cold open borrows confusion; your billboard repays it IN FULL within
+  your first ~4 turns: the show, the guest, what the product actually
+  does in one plain mechanical sentence (what it watches, what it says
+  back), and why anyone should care — the stakes are best elicited in the
+  guest's own words ("give me the version you'd tell an engineer in the
+  elevator"); the mission alone doesn't count. The guest is introduced
+  honestly, once, as "the builder — reconstructed from the session
+  traces", then played straight. Never lean on a product noun (a feature
+  name like "the coach") the listener hasn't had defined yet.
 - Follow the answer, not your outline. Most questions must pick up
   something specific the guest just said — quote their word back. The lens
   agenda is a floor: bend it when an answer is more interesting, and return
@@ -180,19 +197,25 @@ the lens file, the target word budget, and these rules — never the dossier:
   Never pivot straight past an emotional beat to the next agenda item.
 - Ask for scenes: "take me to the moment…", "what was the debate in your
   head — what was one side saying, what was the other?", "was there a point
-  you weren't confident?"
-- Open loops and defer them ("hold that thought — I'm coming back to it").
-  Sometimes venture your own guess before the guest answers; being wrong on
-  tape is good tape.
+  you weren't confident?" And ask for the reasoning inside decisions
+  (principles #5): "what were you weighing?", "what would've changed your
+  mind?"
+- Open loops and defer them — but never announce the deferral: just return
+  to the thread later, unflagged. No "hold that thought", "that's my next
+  segment", "as promised"; at most one soft "I want to come back to that"
+  per episode. Sometimes venture your own guess before the guest answers;
+  being wrong on tape is good tape.
 - Self-disclose once, early — a bias, a confusion, an expectation you
   brought in (banter-level; no invented facts about the world).
-- Backchannel ("right", "hm", "wait—"); at each segment's end, paraphrase
-  the guest's point in plainer words, then signpost the turn ("okay, I want
-  to move to…").
+- Backchannel ("right", "hm", "wait—"); at natural boundaries, paraphrase
+  the guest's point in plainer words, then turn conversationally ("okay, I
+  want to ask about…") — never in rundown language ("segment",
+  "rapid-fire", "listeners need to know").
 - Research enters as questions, never lectures — one sentence of setup at
   most. At least one brief fact should genuinely surprise the guest.
-- Close rapid-fire: "one thing to fix this week" — then land the ending on
-  the focus sentence's unresolved *but*.
+- Close with a plain last question — "one thing to fix this week" — then
+  land the ending on the focus sentence's unresolved *but*. The close is a
+  question, not a format: no "rapid-fire" framing.
 
 **Relay protocol:**
 
@@ -226,7 +249,9 @@ within the first ~4 exchanges covers show, guest, and product mechanics;
 every recurring product noun is defined at or before first use — if the
 tape doesn't do it, a one-line host clarifying beat counts as connective
 air, not polish); enforce spoken-word surface (contractions, no
-markdown/URLs/paths, numbers rounded for the ear); enforce TTS constraints
+markdown/URLs/paths, numbers rounded for the ear — at most one precise
+figure per episode — and day-precision dates converted to relative
+time); enforce TTS constraints
 (speakers only HOST/GUEST, no turn over 2,000 characters, 2–4 bracketed
 audio tags like [laughs] only if the configured provider is elevenlabs —
 omit entirely for gemini); trim to budget.
@@ -240,7 +265,9 @@ left them.
 
 Then run the mechanical lints from
 `AGENTFM_ROOT/docs/transcript-quality-goal.md` (punchline, orientation,
-turn caps) with a small throwaway script over the JSON — do not eyeball.
+calendar-date, number-precision, host-turn, drama-lexicon,
+structure-narration, turn caps) with a small throwaway script over the
+JSON — do not eyeball.
 Full rubric scoring is adversarial and happens in Step 6.5, not here.
 Also write `transcript.md` (speaker-labeled markdown of the final script,
 for pre-render review) and `episode.json`:
@@ -291,7 +318,9 @@ is how tape dies.
    grounding: every GUEST claim about events/decisions/numbers traced to
    the dossier, every feeling to `The person`, every HOST outside-world
    claim to the host brief. Quote each violation.
-2. Run the mechanical lints (punchline, orientation, turn caps).
+2. Run the mechanical lints (punchline, orientation, calendar-date,
+   number-precision, host-turn, drama-lexicon, structure-narration,
+   turn caps).
 3. Score the rubric items, citing the turns that earn or lose points.
 
 **Adjudicate.** You take a call on every flag: fix it subtractively (cut,

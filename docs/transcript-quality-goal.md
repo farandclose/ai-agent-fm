@@ -5,7 +5,9 @@ HOST/GUEST turns, GUEST = the builder in first person) against the
 principles in `docs/podcast-principles.md`. The bar is connection, not
 polish: a listener should finish knowing what the builder wanted, what it
 cost, and what almost went wrong — and feel they met a person, not a
-spokesperson.
+spokesperson. The register is the long-form conversation show (the
+principles' north star): the script must read as two people talking,
+never as produced radio — structure is felt, never heard.
 
 **This run optimizes TEXT ONLY.** Do not synthesize audio, do not run
 `publish.py`, do not call any TTS API — every audio render spends paid
@@ -23,49 +25,66 @@ Judged, with cited evidence per line item — quote the turns that earn or
 lose the points. Only the punchline lint and turn-cap checks are counted
 mechanically.
 
-**1. Spine & person — 25 pts**
+**1. Spine & person — 20 pts**
 - The builder's want (goal + burning motivation) and the obstacle (the
   focus sentence's *but*) are both audible in the first quarter of the
-  episode: 8
+  episode: 6
 - The guest is the builder in first person throughout — never a
-  commentator describing the builder in third person: 5
+  commentator describing the builder in third person: 4
 - Goals, stakes, AND vulnerability are all audible (what they wanted, what
-  failure would cost, where they struggled or were wrong): 6
+  failure would cost, where they struggled or were wrong): 5
 - At least one concession, mistake, or open doubt is left standing —
-  not converted into a win within the same exchange: 6
+  not converted into a win within the same exchange: 5
 
-**2. Anecdote engine — 25 pts**
+**2. Anecdote engine — 20 pts**
 - Every segment alternates action and reflection (something HAPPENS, then
-  someone says what it meant) — no segment is reflection-only: 10
-- At least 2 fully-realized scenes with concrete, imageable detail (a time,
-  an artifact, a verbatim line, what was on the screen): 8
+  someone says what it meant) — no segment is reflection-only: 8
+- At least 2 fully-realized scenes with concrete, imageable detail (an
+  artifact, a verbatim line, what was on the screen): 7
 - Abstractions are converted to instances; the host audibly extracts
-  scenes ("take me to the moment…") rather than opinions: 7
+  scenes ("take me to the moment…") rather than opinions: 5
 
-**3. Pull & shape — 20 pts**
+**3. Reasoning depth — 15 pts** (principles #5)
+- Every pivotal decision kept in the episode comes with its deliberation
+  — what the builder feared, what alternatives they weighed, why then —
+  not just the event and its outcome: 8
+- The host audibly asks for reasoning at least twice ("what were you
+  weighing?", "what would have changed your mind?"): 4
+- At least one tradeoff is walked honestly enough that a listener could
+  disagree with the call: 3
+
+**4. Pull & shape (invisible) — 15 pts**
 - ≥ 2 open loops raised early and answered later — with real distance
-  between raise and resolve; bonus behavior: the host guesses wrong once
-  before a reveal: 8
-- The episode has at most 2 emotional peaks with plainer connective
-  material between them — intensity is a curve, not a flat line: 6
+  between raise and resolve, and the return UNANNOUNCED (the host just
+  picks the thread back up); bonus behavior: the host guesses wrong once
+  before a reveal: 6
+- At most 2 emotional peaks, each a moment of substance (a confession, a
+  live realization, an unanswerable question) — never a prose effect —
+  with plainer connective material between them: 5
 - The ending is protected: the final exchanges land on the focus
   sentence's unresolved *but*, and nothing important is crammed after the
-  emotional close: 6
+  emotional close: 4
 
-**4. Listening & asymmetry — 20 pts**
+**5. Listening & asymmetry — 15 pts**
 - ≥ 1/3 of host turns are reactive follow-ups that pick up a specific word
-  or claim from the guest's previous turn: 6
+  or claim from the guest's previous turn: 5
 - Disclosures get an acknowledgment beat before any topic change; the
-  prepared agenda visibly bends at least once (a chase, a drift-and-return): 6
+  prepared agenda visibly bends at least once (a chase, a drift-and-return): 4
 - Information asymmetry pays off on-mic in BOTH directions: the host is
   genuinely surprised by something from the dossier side, the guest by a
-  host-brief fact, and at least one speaker audibly updates their view: 8
+  host-brief fact, and at least one speaker audibly updates their view: 6
 
-**5. Air & surface — 10 pts**
-- Spoken signposts at segment boundaries and at least one host paraphrase
-  of the guest's point in plainer words (load management, second encoding): 4
-- Backchannels present; at least one unfinished thought; hesitation/
-  self-repair appears on hard memories, not on plain facts: 4
+**6. Speech realism & air — 15 pts** (principles #14)
+- The texture is spoken, not written: long additive sentences chained
+  with and/so/because, hedges ("I think", "sort of", "probably"), natural
+  word repetition — no staccato fragments, echo repetition, or placed
+  ellipses as drama, no elegant variation or essay metaphors: 6
+- Past tense is the default for past events; the historical present
+  appears at most inside one vivid scene and is never date-stamped: 3
+- Signposts at natural boundaries and at least one host paraphrase in
+  plainer words; backchannels present; at least one unfinished thought;
+  hesitation/self-repair on hard memories only — scattered and
+  unremarkable, never placed at an emotional peak as a beat: 4
 - Direct address to the listener at most once or twice, where it earns
   intimacy: 2
 
@@ -76,12 +95,43 @@ is the anti-aphorism guard — quotable lines are allowed to exist, but only
 against a plainer surround.
 
 **Orientation lint (mechanical, applied before scoring):** by the end of
-the first 4 exchanges, the show, the guest, and what the product actually
+the first 4 exchanges, the show, the guest, what the product actually
 does (mechanics — what it watches, what it says back — not just the
-mission) must all have been stated; and every recurring product noun
+mission), AND why anyone should care (the stakes, in the builder's own
+words) must all have been stated; and every recurring product noun
 (feature names like "the coach") must be defined at or before its first
 use. Each violation: −5 from the total. A cold open may borrow confusion;
-the billboard must repay it in full (principles §11).
+the billboard must repay it in full (principles #9).
+
+**Calendar-date lint (mechanical):** no spoken day-precision date ("June
+27th", "on July 3rd"). Time is anchored relative to now ("a couple of
+weeks ago", "the other day"); month/year anchors ("back in late June",
+"in 2014") are allowed only for spans long enough to warrant them. Each
+violation: −5.
+
+**Number-precision lint (mechanical):** every spoken number must be round
+(a multiple of ten/hundred, or a natural fraction like "two-thirds") or
+hedged ("about a hundred", "seventy-odd", "something like"); counts of a
+hundred or more always want a hedge ("about a hundred sessions", "a
+hundred-plus"), round or not. At most ONE un-round, un-hedged number in
+the whole episode, reserved for when the precision itself is the point.
+Each additional violation: −5.
+
+**Host-turn lint (mechanical + judged):** at most one question mark per
+HOST turn, and no host turn stacks more than two moves (a move =
+acknowledge/react, paraphrase, self-disclose, introduce a brief fact, or
+ask). Each violation: −5. (Principles #13.)
+
+**Drama-lexicon lint (mechanical):** the HOST never uses death/violence/
+forensics metaphors — kill(ed), murder(ed), autopsy, dissect, corpse,
+wound, scar, brutal, mercy killing. The GUEST may use such a word only
+where the dossier records it as the builder's own. Each violation: −5.
+
+**Structure-narration lint (mechanical):** zero show-rundown vocabulary
+on-mic — "segment", "rapid-fire", "as promised", "hold that thought",
+"that's my next…", "listeners need to know". Callbacks return to their
+thread unannounced; at most one soft, human deferral per episode ("I want
+to come back to that"). Each violation: −5. (Principles #13.)
 
 ## Hard constraints (any violation = reject the revision, score is void)
 
@@ -105,19 +155,25 @@ the billboard must repay it in full (principles §11).
    turn over 2,000 characters (the TTS request limit). Turns over ~60 words
    should be split with the other speaker's backchannel.
 6. **Character consistency.** HOST is the same curious, mildly skeptical,
-   informed generalist every episode (research surfaces as questions, never
-   lectures); GUEST is the builder, first person, introduced once as
-   reconstructed from the traces. Never sycophantic.
+   informed generalist every episode, modeled on calm long-form
+   interviewers (Shane Parrish, Lex Fridman): plain short questions,
+   research surfacing as questions never lectures, a facilitator not a
+   performer (principles #13); GUEST is the builder, first person,
+   introduced once as reconstructed from the traces. Never sycophantic.
 7. **Spoken-word surface.** No markdown, URLs, or code identifiers longer
-   than a word or two; numbers rounded for the ear; contractions.
+   than a word or two; numbers rounded for the ear and day-precision dates
+   converted to relative time (see the calendar-date and number-precision
+   lints); contractions.
 8. **Provider fit.** 2–4 bracketed audio tags ([laughs], [sighs]) only if
    the configured TTS provider is elevenlabs; omit entirely for gemini.
 
 ## Run procedure (score → revise → repeat, all on text)
 
 1. Check every hard constraint; fix any failure before scoring.
-2. Run the punchline lint, the orientation lint, and the turn-cap check
-   mechanically (a small throwaway script over the JSON; do not eyeball).
+2. Run every mechanical lint — punchline, orientation, calendar-date,
+   number-precision, host-turn, drama-lexicon, structure-narration — and
+   the turn-cap check (a small throwaway script over the JSON; do not
+   eyeball).
 3. Judge items 1–5 against the rubric, quoting the evidence turns per line.
 4. Revise ONLY the lowest-scoring items, subtractively (cut, restore tape,
    reorder, add air). Preserve what already scores well.
@@ -139,3 +195,19 @@ prevent. This rubric scores the properties that research says create
 connection and memory — spine, scenes, open loops, shape, audible
 listening, imperfection — and treats mechanical counts as guards, not
 goals. See `docs/podcast-principles.md` for the evidence base.
+
+## Why revised again (2026-07-08)
+
+The 2026-07-07 rubric killed the aphorism string — and the drama moved
+house: into sentence rhythm (staccato fragments, echo repetition, placed
+ellipses), screenplay devices (present-tense date-stamped scenes,
+hyper-precise counts like "a hundred and twenty sessions"), and
+produced-radio furniture (announced callbacks, a "rapid-fire close", a
+host drama lexicon of kills and autopsies). Builder review of
+`human-harness-2026-07-07-product-2` caught all of it. Root cause: the
+taste target was produced narrative radio; it is now the long-form
+conversation show (Lex Fridman, The Knowledge Project, a16z). Structure
+survives as writer-side discipline but must be inaudible; speech texture
+and reasoning depth are now scored (items 3 and 6); five new lints guard
+the tells. See the principles' north star and #5, #13, #14, derived from
+verbatim transcripts of the target shows.
