@@ -178,17 +178,22 @@ the lens file, the target word budget, and these rules — never the dossier:
   (kill, murder, autopsy, dissect) — and ONE move per turn: an
   acknowledgment beat plus one question is your maximum. The drama lives
   in what the guest says, never in your phrasing.
-- Turn 1 is a cold open: your sharpest curiosity gap as a real question,
-  asked plainly — never a dramatized monologue read at the listener. The
-  cold open borrows confusion; your billboard repays it IN FULL within
-  your first ~4 turns: the show, the guest, what the product actually
-  does in one plain mechanical sentence (what it watches, what it says
-  back), and why anyone should care — the stakes are best elicited in the
+- Begin the live interview plainly from the context you were actually
+  given. Do not try to manufacture the final listener-facing cold open;
+  the editor chooses that after hearing the whole interview. Your opening
+  question may use the host brief and objective, but it may not assert an
+  inside-story fact you have not heard from the guest. If you infer, label
+  it as a hypothesis ("I wondered whether…", "was that more of a pivot
+  than an abandonment?"). Never heighten duration, motive, consequence,
+  or finality for drama. Establish the show, the guest, what the product
+  actually does in one plain mechanical sentence (what it watches, what
+  it says back), and why anyone should care within your first ~4 turns;
+  the mission alone doesn't count. The stakes are best elicited in the
   guest's own words ("give me the version you'd tell an engineer in the
-  elevator"); the mission alone doesn't count. The guest is introduced
-  honestly, once, as "the builder — reconstructed from the session
-  traces", then played straight. Never lean on a product noun (a feature
-  name like "the coach") the listener hasn't had defined yet.
+  elevator"). Introduce the guest honestly, once, as "the builder —
+  reconstructed from the session traces", then play it straight. Never
+  lean on a product noun (a feature name like "the coach") the listener
+  hasn't had defined yet.
 - Follow the answer, not your outline. Most questions must pick up
   something specific the guest just said — quote their word back. The lens
   agenda is a floor: bend it when an answer is more interesting, and return
@@ -204,7 +209,8 @@ the lens file, the target word budget, and these rules — never the dossier:
   to the thread later, unflagged. No "hold that thought", "that's my next
   segment", "as promised"; at most one soft "I want to come back to that"
   per episode. Sometimes venture your own guess before the guest answers;
-  being wrong on tape is good tape.
+  being wrong on tape is good tape only when the guess is audibly a guess,
+  not a false premise delivered as fact.
 - Self-disclose once, early — a bias, a confusion, an expectation you
   brought in (banter-level; no invented facts about the world).
 - Backchannel ("right", "hm", "wait—"); at natural boundaries, paraphrase
@@ -219,8 +225,8 @@ the lens file, the target word budget, and these rules — never the dossier:
 
 **Relay protocol:**
 
-1. HOST opens; relay each utterance verbatim to the other agent, logging
-   every turn in order.
+1. HOST begins with the plain, grounded live opening; relay each utterance
+   verbatim to the other agent, logging every turn in order.
 2. At each segment boundary, send the HOST: "PRODUCER NOTE: in 3 bullets —
    what's covered, what surprised you, what you'll chase or drop next."
    Log the note; it is not part of the script. This is where the interview
@@ -240,8 +246,28 @@ sharpest question — fewer ideas, never less air.
 You are now the editor, and the edit is a CUT, not a rewrite. Working from
 `interview-raw.json`, produce `script.json`:
 
-The edit pass does exactly this: select the strongest tape; cut redundancy
-and dead exchanges; reorder minimally if a scene lands better earlier;
+**Opening pass:** choose the listener-facing opening only now, with the
+whole interview available. Prefer a short contiguous excerpt from
+`interview-raw.json`: either one GUEST turn or one HOST→GUEST exchange,
+copied verbatim and identified by raw turn indices. It must be
+understandable cold, representative of the focus sentence, and create
+curiosity without revealing the answer, principal peak, or protected
+ending. Reject an excerpt that depends on an undefined noun, contains an
+ungrounded premise, or needs stitching, montage, or rewriting. If a tape
+opener qualifies, prepend it using the existing HOST/GUEST schema; do not
+invent a TAPE speaker, narrator, music cue, or production label. Prefer to
+remove or move its later occurrence; retain or trim the duplicate only
+when continuity requires it. If no excerpt qualifies, use an honest
+fallback: the billboard followed by a plain grounded question. "No tape
+opener" is a valid editorial decision, never a failure to fill a slot.
+Start `review.md` now with `Opening mode: tape` or `Opening mode: fallback`.
+For tape mode, record the raw turn indices, why the excerpt qualifies, and
+what happened to its later occurrence. For fallback mode, record why no
+raw moment qualified. The reviewers use this declaration as evidence.
+
+Then complete the rest of the edit pass: select the strongest tape; cut
+redundancy and dead exchanges; reorder minimally if a scene lands better
+earlier;
 split turns over ~60 words by inserting the other speaker's backchannel;
 insert connective air where the ear needs it (signposts, a one-line host
 paraphrase, "okay, so—"); verify orientation debt is repaid (the billboard
@@ -264,8 +290,8 @@ most half may end neatly resolved; leave thoughts hanging where the tape
 left them.
 
 Then run the mechanical lints from
-`AGENTFM_ROOT/docs/transcript-quality-goal.md` (punchline, orientation,
-calendar-date, number-precision, host-turn, drama-lexicon,
+`AGENTFM_ROOT/docs/transcript-quality-goal.md` (punchline, opener-integrity,
+orientation, calendar-date, number-precision, host-turn, drama-lexicon,
 structure-narration, turn caps) with a small throwaway script over the
 JSON — do not eyeball.
 Full rubric scoring is adversarial and happens in Step 6.5, not here.
@@ -308,27 +334,38 @@ is how tape dies.
 3. Flag every turn where it had to guess — an undefined term, a reference
    to something never explained, a leap it couldn't follow.
 4. List threads that felt dropped by mistake (vs. deliberately left open).
+5. Describe what the opening promises and whether the episode honestly
+   delivers it; flag if the opener gives away a later answer or peak.
 
-**Grounding & rubric auditor** receives `script.json`, `dossier.md`,
-`host-brief.md`, `objective.md`, and the paths to
+**Grounding & rubric auditor** receives `script.json`,
+`interview-raw.json`, `dossier.md`, `host-brief.md`, `objective.md`, and
+the paths to
 `AGENTFM_ROOT/docs/transcript-quality-goal.md` and
 `AGENTFM_ROOT/docs/podcast-principles.md`. Ask it to:
 
 1. Check every hard constraint in the rubric — especially two-source
    grounding: every GUEST claim about events/decisions/numbers traced to
    the dossier, every feeling to `The person`, every HOST outside-world
-   claim to the host brief. Quote each violation.
-2. Run the mechanical lints (punchline, orientation, calendar-date,
-   number-precision, host-turn, drama-lexicon, structure-narration,
-   turn caps).
-3. Score the rubric items, citing the turns that earn or lose points.
+   claim to the host brief, and every HOST inside-story assertion either
+   previously disclosed by the GUEST or explicitly framed as a question
+   or hypothesis. Quote each violation.
+2. Verify the declared opening mode. In tape mode, confirm the opener is
+   one contiguous verbatim GUEST turn or HOST→GUEST exchange in
+   `interview-raw.json`, and flag rewriting, stitching, missing context,
+   duplication, or a spent reveal. In fallback mode, confirm the opening
+   is a billboard plus a plain grounded question.
+3. Run the mechanical lints (punchline, opener-integrity, orientation,
+   calendar-date, number-precision, host-turn, drama-lexicon,
+   structure-narration, turn caps).
+4. Score the rubric items, citing the turns that earn or lose points.
 
 **Adjudicate.** You take a call on every flag: fix it subtractively (cut,
 restore tape from `interview-raw.json`, reorder, add a one-line host
-beat) or reject it with a stated reason. Write `review.md` in the episode
-directory: each flag, its verdict (fixed / rejected), and the reason. If
-you fixed anything, regenerate `transcript.md` and re-run the mechanical
-lints.
+beat) or reject it with a stated reason. Append each flag to `review.md`
+with its verdict (fixed / rejected) and the reason. If the adjudication
+changes the opener, update its mode, provenance, rationale, and later-
+occurrence decision before re-running both reviews. If you fixed anything,
+regenerate `transcript.md` and re-run the mechanical lints.
 
 **Gate:** grounding violations (hard constraints) must be fixed or shown
 false against the dossier — they cannot be rejected for taste. Quality

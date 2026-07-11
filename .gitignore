@@ -20,6 +20,13 @@ check-tts.mp3
 docs/superpowers/
 docs/ideation/
 
+# local discussion and review artifacts
+docs/design/human-harness-visual-directions.png
+docs/episode-opening-frame.md
+docs/episode-opening-shaping.md
+docs/human-harness-2026-07-08-product-transcript.md
+docs/positioning-frame.md
+
 # harness + OS cruft
 .claude/
 .DS_Store

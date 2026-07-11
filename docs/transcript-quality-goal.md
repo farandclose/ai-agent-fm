@@ -56,8 +56,9 @@ mechanically.
 **4. Pull & shape (invisible) — 15 pts**
 - ≥ 2 open loops raised early and answered later — with real distance
   between raise and resolve, and the return UNANNOUNCED (the host just
-  picks the thread back up); bonus behavior: the host guesses wrong once
-  before a reveal: 6
+  picks the thread back up). If a tape opener is used, it raises one of
+  these loops without closing it; bonus behavior: the host guesses wrong
+  once before a reveal, with the guess audibly labeled as a guess: 6
 - At most 2 emotional peaks, each a moment of substance (a confession, a
   live realization, an unanswerable question) — never a prose effect —
   with plainer connective material between them: 5
@@ -94,14 +95,26 @@ a zinger, a wrapped bow). Each violating window: −5 from the total. This
 is the anti-aphorism guard — quotable lines are allowed to exist, but only
 against a plainer surround.
 
+**Opener-integrity lint (mechanical + judged, applied before scoring):**
+when `interview-raw.json` exists and the episode declares tape mode, the
+opening must be exactly one contiguous verbatim GUEST turn or HOST→GUEST
+exchange from the raw turns, with its indices recorded in `review.md`.
+No rewriting, stitching, montage, undefined dependency, ungrounded
+premise, duplicate left without a continuity reason, or excerpt that
+spends the answer, principal peak, or protected ending. In fallback mode,
+the opening is a billboard plus a plain grounded question, and `review.md`
+states why no raw moment qualified. If raw tape is unavailable, do not
+claim tape provenance; assess the opening as a direct opening. Any
+provenance or integrity violation rejects the revision (principles #9).
+
 **Orientation lint (mechanical, applied before scoring):** by the end of
-the first 4 exchanges, the show, the guest, what the product actually
-does (mechanics — what it watches, what it says back — not just the
-mission), AND why anyone should care (the stakes, in the builder's own
-words) must all have been stated; and every recurring product noun
-(feature names like "the coach") must be defined at or before its first
-use. Each violation: −5 from the total. A cold open may borrow confusion;
-the billboard must repay it in full (principles #9).
+the first 4 exchanges, including any tape opener, the show, the guest,
+what the product actually does (mechanics — what it watches, what it says
+back — not just the mission), AND why anyone should care (the stakes, in
+the builder's own words) must all have been stated; and every recurring
+product noun (feature names like "the coach") must be defined at or before
+its first use. Each violation: −5 from the total. An opener may borrow
+context; the billboard must repay it in full (principles #9).
 
 **Calendar-date lint (mechanical):** no spoken day-precision date ("June
 27th", "on July 3rd"). Time is anchored relative to now ("a couple of
@@ -137,52 +150,59 @@ to come back to that"). Each violation: −5. (Principles #13.)
 
 1. **Text only.** No audio synthesis, no `publish.py`, no TTS or upload API
    calls anywhere in the run.
-2. **Two-source grounding.** Every GUEST claim about events, decisions, or
+2. **Source grounding.** Every GUEST claim about events, decisions, or
    numbers traces to the episode's `dossier.md`; every GUEST claim about
    feelings or motivations traces to the dossier's `The person` section;
    every HOST outside-world claim traces to `host-brief.md`. Banter is
    free; claims are not. If the dossier doesn't record it, the guest says
-   they can't say — never a fabricated memory. No host brief → the HOST
-   makes no outside-world claims.
-3. **Labeled speculation only.** The GUEST may extrapolate beyond the
+   they can't say — never a fabricated memory. Every HOST inside-story
+   assertion must either have been disclosed by the GUEST earlier in the
+   raw interview or be explicitly framed as a question or hypothesis. No
+   host brief → the HOST makes no outside-world claims.
+3. **Opener provenance.** Tape mode satisfies the opener-integrity lint:
+   one contiguous verbatim GUEST turn or HOST→GUEST exchange from
+   `interview-raw.json`, with recorded indices and no spent reveal. If no
+   excerpt qualifies, fallback mode is required and is not penalized.
+4. **Labeled speculation only.** The GUEST may extrapolate beyond the
    dossier at most 2–3 times, each audibly marked as judgment ("my read
    is…", "if I had to bet…") and reasoning from a named dossier fact.
-4. **Length budget.** Total spoken text within the stated budget for the
+5. **Length budget.** Total spoken text within the stated budget for the
    run. Default: 1,800–2,200 words (~12 min). Tight budget (~750 words):
    one arc, one fully-realized scene, one peak — fewer ideas, never less
    air.
-5. **Schema.** Valid `script.json`; `speaker` only HOST or GUEST; no single
+6. **Schema.** Valid `script.json`; `speaker` only HOST or GUEST; no single
    turn over 2,000 characters (the TTS request limit). Turns over ~60 words
    should be split with the other speaker's backchannel.
-6. **Character consistency.** HOST is the same curious, mildly skeptical,
+7. **Character consistency.** HOST is the same curious, mildly skeptical,
    informed generalist every episode, modeled on calm long-form
    interviewers (Shane Parrish, Lex Fridman): plain short questions,
    research surfacing as questions never lectures, a facilitator not a
    performer (principles #13); GUEST is the builder, first person,
    introduced once as reconstructed from the traces. Never sycophantic.
-7. **Spoken-word surface.** No markdown, URLs, or code identifiers longer
+8. **Spoken-word surface.** No markdown, URLs, or code identifiers longer
    than a word or two; numbers rounded for the ear and day-precision dates
    converted to relative time (see the calendar-date and number-precision
    lints); contractions.
-8. **Provider fit.** 2–4 bracketed audio tags ([laughs], [sighs]) only if
+9. **Provider fit.** 2–4 bracketed audio tags ([laughs], [sighs]) only if
    the configured TTS provider is elevenlabs; omit entirely for gemini.
 
 ## Run procedure (score → revise → repeat, all on text)
 
 1. Check every hard constraint; fix any failure before scoring.
-2. Run every mechanical lint — punchline, orientation, calendar-date,
-   number-precision, host-turn, drama-lexicon, structure-narration — and
-   the turn-cap check (a small throwaway script over the JSON; do not
-   eyeball).
+2. Run every mechanical lint — punchline, opener-integrity, orientation,
+   calendar-date, number-precision, host-turn, drama-lexicon,
+   structure-narration — and the turn-cap check (a small throwaway script
+   over the JSON; do not eyeball).
 3. Judge items 1–5 against the rubric, quoting the evidence turns per line.
 4. Revise ONLY the lowest-scoring items, subtractively (cut, restore tape,
    reorder, add air). Preserve what already scores well.
 5. Repeat. Stop when: score ≥ 85 with all hard constraints green, OR two
    consecutive iterations fail to improve, OR the next revision would
    violate a hard constraint.
-6. Final report: total score, per-item breakdown with evidence, iteration
-   count, what changed. End with: "Ready to render — synthesizing this
-   costs ~N credits" where N = total character count. Do NOT render.
+6. Final report: opening mode and provenance decision; total score,
+   per-item breakdown with evidence, iteration count, what changed. End
+   with: "Ready to render — synthesizing this costs ~N credits" where N =
+   total character count. Do NOT render.
 
 ## Why the old rubric was replaced (2026-07-07)
 
@@ -211,3 +231,17 @@ survives as writer-side discipline but must be inaudible; speech texture
 and reasoning depth are now scored (items 3 and 6); five new lints guard
 the tells. See the principles' north star and #5, #13, #14, derived from
 verbatim transcripts of the target shows.
+
+## Why revised again (2026-07-11)
+
+Builder review of `human-harness-2026-07-08-product` found that the
+required pre-interview cold open had manufactured two false premises: work
+that took days became "weeks", and a pivot became "walking away". The
+failure was structural, not just a bad line: a firewalled host was being
+asked to invent the episode's sharpest framing before hearing the guest.
+The pipeline now separates the plain live opening from the final
+listener-facing opening. After the interview, the editor may promote only
+a short contiguous verbatim raw-tape excerpt with recorded provenance; if
+none qualifies, an honest billboard and grounded question is the correct
+fallback. The new opener-integrity lint protects factuality, context, and
+later reveals without introducing a new speaker or production layer.

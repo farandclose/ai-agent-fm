@@ -129,18 +129,30 @@ And leave gaps for the listener to complete. If the writing does
 everything, the listener has nothing to do — and doing is where
 connection forms.
 
-### 9. A cold open borrows confusion; the billboard repays it
+### 9. The opening makes a truthful promise; the billboard repays context
 
-A **cold open** — starting mid-story before any introductions — is a
-loan: the listener tolerates confusion because the **billboard** (the few
-lines that orient them) repays it a few exchanges later. Repaid in full
-means: within the first ~4 exchanges the listener has the show, who's
-speaking, what the product actually does — one plain mechanical sentence
-(what it watches, what it says back), not just the mission — and why
-anyone should care, best in the builder's own words ("give me the version
-you'd tell an engineer in the elevator"). The cold open itself is a real
-question the host asks the guest, never a dramatized monologue read at
-the listener.
+The listener-facing opening is chosen only after the full raw interview
+exists. Prefer one short **tape opener**: a contiguous, verbatim moment
+from the interview — normally one GUEST turn or a HOST→GUEST exchange.
+It should make sense without hidden context, represent the episode's
+actual focus, and open a question without spending the answer, the
+principal peak, or the protected ending. The structure may be engineered
+after the conversation; the words may not. No montage, stitching, or
+rewriting a merely promising quote into a better one.
+
+A tape opener is a preference, not a quota. If no raw moment earns the
+position, start with the **billboard** and a plain, grounded host question.
+No teaser is better than a misleading teaser. The host never heightens an
+inside-story fact, converts a pivot into an abandonment, or states an
+unseen premise as fact just to provoke a correction. A guess must sound
+like a guess.
+
+In either mode, the billboard repays any borrowed context within the first
+~4 exchanges: the listener has the show, who's speaking, what the product
+actually does — one plain mechanical sentence (what it watches, what it
+says back), not just the mission — and why anyone should care, best in the
+builder's own words ("give me the version you'd tell an engineer in the
+elevator").
 
 Every recurring product noun (a feature name like "the coach") is defined
 at or before first use. The writer always knows what the noun means; only
@@ -254,7 +266,8 @@ nearly the inverse of good writing:
 3. **Pull:** loops opened early and answered late; one or two peaks of
    substance; a protected ending (#6, #7).
 4. **Surface:** air, signposts, paraphrase, gaps left for the listener
-   (#8); orientation debt repaid on time (#9).
+   (#8); a truthful tape opener or honest direct opening, with orientation
+   debt repaid on time (#9).
 5. **Conversation:** audible listening, real surprise, imperfection left
    in, a facilitator host (#10–#13).
 6. **Voice:** speech, not prose (#14).
@@ -272,9 +285,15 @@ nearly the inverse of good writing:
   guard principles, never replace them (#1–#7).
 - **Budget stuffing** — carrying a full agenda into a short episode so
   every line is payload; fewer ideas, never less air (#7, #8).
-- **Unpaid orientation debt** — a cold open whose confusion never gets
-  fully repaid: mission named, mechanics missing, feature nouns undefined
-  (#8, #9).
+- **Manufactured premise** — the host states an unseen or distorted
+  inside-story fact as truth to manufacture tension or a correction
+  (#9, #11, #13).
+- **The spent teaser** — an opener consumes the answer, principal peak,
+  or protected ending, or quotes a moment that only makes sense with
+  missing context (#6, #7, #9).
+- **Unpaid orientation debt** — an opening whose borrowed context never
+  gets fully repaid: mission named, mechanics missing, feature nouns
+  undefined (#8, #9).
 - **The screenplay scene** — present tense + calendar date + precise
   counts ("it's June 27th, I'm mid-session… a hundred and twenty of my
   sessions"): recall staged as drama (#14).
