@@ -1,33 +1,58 @@
-"""AI Agent FM — promo video ("Radiating Pulse").
+"""AI Agent FM — promo video ("Radiating Pulse") with word-synced captions.
 
 Standalone CLI (sibling of ``publish.py``) that turns an audio clip into a
-square, LinkedIn-ready MP4: the Spectrum Cone brand mark on a flat ink ground,
-its radial arc gradient pulsing outward from the source point in sync with the
-audio, the wordmark beneath, and the audio muxed in.
+LinkedIn-ready MP4: the Spectrum Cone brand mark on a flat ink ground, its
+radial arc gradient pulsing outward from the source point in sync with the
+audio, the wordmark, and the audio muxed in. Optionally it burns in
+word-synced captions beneath the cone (whole phrase in ivory, the spoken word
+recolored per speaker — HOST amber / GUEST magenta — with a scale pop) and can
+render a vertical 9:16 master alongside the default square.
 
+    # one-time (sub-cent): fetch + cache word alignment for an episode
+    uv run promo_video.py episodes/<ep>/episode.mp3 \
+        --transcript episodes/<ep>/script.json --align-only
+
+    # captioned square (or vertical) promo from a window of the episode
     uv run promo_video.py episodes/<ep>/episode.mp3 -o promo.mp4 \
-        [--start 63] [--duration 45] [--title "How I built X"] \
-        [--fps 30] [--size 1080]
+        --transcript episodes/<ep>/script.json --start 63 --duration 45 \
+        --title "How I built X" [--format vertical]
 
-Design is final (see ``docs/design/promo-video-pulse.md``); geometry and color
-come verbatim from ``docs/design/spectrum-cone-v2/BRAND-SPEC.md``. This module
-holds only mechanics: audio-energy envelope math, gradient/mask rendering, and
-a single-process ffmpeg encode over a rawvideo stdin pipe. It imports the error
-taxonomy from ``publish`` so ``main()`` follows the same contract: catch only
-``AgentFMError``, print ``error: …`` to stderr, exit 1. Pillow is imported
-lazily inside the functions that need it; the only external tool is
-ffmpeg-on-PATH (already required by the repo).
+Design is final (see ``docs/design/promo-video-pulse.md`` and
+``docs/design/promo-video-captions.md``); geometry and color come verbatim from
+``docs/design/spectrum-cone-v2/BRAND-SPEC.md``. This module holds only
+mechanics: audio-energy envelope math, gradient/mask rendering, caption block
+timing, the forced-alignment client (raw urllib multipart, mirroring the
+ElevenLabs TTS call in ``publish.py``) with its JSON cache, and a single-
+process ffmpeg encode over a rawvideo stdin pipe. It imports the error taxonomy
+from ``publish`` (and defines ``AlignmentError`` locally) so ``main()`` follows
+the same contract: catch only ``AgentFMError``, print ``error: …`` to stderr,
+exit 1. Pillow is imported lazily inside the functions that need it; the only
+external tool is ffmpeg-on-PATH (already required by the repo). The alignment
+API is the sole network touch and only runs to (re)build a missing cache.
 """
 
 import argparse
 import array
+import hashlib
+import json
 import math
+import os
+import re
+import ssl
 import subprocess
 import sys
 import tempfile
+import time
+import unicodedata
+import urllib.error
+import urllib.request
 from pathlib import Path
 
-from publish import AgentFMError, AudioError, ConfigError
+from publish import AgentFMError, AudioError, ConfigError, EpisodeError, load_env
+
+
+class AlignmentError(AgentFMError):
+    """Raised when forced-alignment fetch, parsing, mapping, or caching fails."""
 
 # ---------------------------------------------------------------------------
 # Brand constants — copied verbatim from BRAND-SPEC.md. Never re-derive.
@@ -101,6 +126,54 @@ _RELEASE_TAU = 0.350  # one-pole release time constant (s).
 # and cache the rendered mark tile per level (visually indistinguishable given
 # the smoothing, per the spec's performance note).
 _QUANT_LEVELS = 32
+
+# ---------------------------------------------------------------------------
+# Caption + vertical-format constants (canvas space, S = --size). From the
+# captions spec's composition tables and cue-timing formulas. Never re-derive.
+# ---------------------------------------------------------------------------
+
+# Vertical coordinates in the spec are given at this reference size and scale
+# linearly by S / _VERTICAL_REF.
+_VERTICAL_REF = 1080
+
+# Corner wordmark shown whenever captions are on (~1/3 the centered size).
+_CAPTION_WORDMARK_CAP_FRAC = 0.026  # cap height / S
+_CAPTION_WORDMARK_LEFT_FRAC = 0.055  # square: left inset / S
+_CAPTION_WORDMARK_TOP_FRAC = 0.05  # square: top inset / S
+_VERTICAL_WORDMARK_XY = (84, 300)  # vertical: (left, top) at S = 1080
+
+# Caption line typography (single line, centered on the canvas mid-x).
+_CAPTION_PT_FRAC = 0.062  # base caption font size / S
+_CAPTION_ACTIVE_SCALE = 1.08  # active word rendered at 1.08x the base pt
+_CAPTION_BASELINE_FRAC = 0.76  # square: baseline y / S
+_VERTICAL_CAPTION_BASELINE = 1160  # vertical: baseline y at S = 1080
+_CAPTION_TILE_MARGIN_PX = 8  # fixed margin around each cropped caption tile
+
+_CAPTION_IVORY = IVORY  # base phrase color #F4F0E6
+_HOST_ACCENT = (0xF3, 0x9A, 0x2B)  # amber #f39a2b — HOST active word
+_GUEST_ACCENT = (0xC8, 0x3C, 0x88)  # magenta #c83c88 — GUEST active word
+
+# Block construction limits.
+_CAPTION_MAX_WORDS = 5
+_CAPTION_MAX_WIDTH_FRAC = 0.90  # max rendered block width / S, real font
+
+# Characters that end a caption block. Sentence enders always break; the soft
+# enders break only once the block already holds >= 3 words. Trailing closing
+# quotes/brackets are ignored when checking the final character.
+_SENTENCE_ENDERS = frozenset(".?!…—")  # . ? ! ellipsis em-dash
+_SOFT_ENDERS = frozenset(",;:")
+_TRAILING_PUNCT = "\"')]}»”’"  # " ' ) ] } » ” ’
+
+# Cue-timing constants (seconds).
+_CUE_LEAD = 0.05  # block in-cue fires 50 ms before its first word
+_CUE_BRIDGE = 0.25  # gaps <= this are bridged (no caption flicker)
+_HIGHLIGHT_LEAD = 0.075  # active word fires 75 ms before its spoken onset
+
+# Forced-alignment API.
+_FORCED_ALIGNMENT_URL = "https://api.elevenlabs.io/v1/forced-alignment"
+_RETRY_SLEEPS = (1.0, 2.0)  # sleeps between the 3 total attempts
+_ALIGNMENT_CACHE_VERSION = 1
+_AUDIO_TAG_RE = re.compile(r"\[[^\]]*\]")  # [laughs]-style audio-tag spans
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +299,607 @@ def compute_envelope(samples, fps: int, rate: int = _DECODE_RATE) -> list[float]
     rms = frame_rms_series(samples, fps, rate)
     smoothed = smooth_asymmetric(rms, fps)
     return normalize_envelope(smoothed)
+
+
+# ---------------------------------------------------------------------------
+# Transcript loading + plain-text construction
+# ---------------------------------------------------------------------------
+
+
+def load_transcript(path) -> list[dict]:
+    """Load and validate a promo ``script.json`` of ``{speaker, text}`` turns.
+
+    A local loader (``publish.load_episode`` needs an ``episode.json`` sibling
+    and must not be reused here). Raises ``EpisodeError`` naming the transcript
+    path on a missing/unreadable file, invalid JSON, an empty ``turns`` list, a
+    speaker outside ``HOST``/``GUEST``, or an empty text field.
+    """
+    path = Path(path)
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        raise EpisodeError(f"transcript not found: {path}")
+    except OSError as exc:
+        raise EpisodeError(f"could not read transcript {path}: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise EpisodeError(f"transcript {path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise EpisodeError(f"transcript {path} must contain a JSON object")
+    turns = data.get("turns")
+    if not isinstance(turns, list) or not turns:
+        raise EpisodeError(f"transcript {path} must have a non-empty 'turns' list")
+    for i, turn in enumerate(turns):
+        if not isinstance(turn, dict):
+            raise EpisodeError(f"transcript {path} turn {i} is not an object")
+        if turn.get("speaker") not in ("HOST", "GUEST"):
+            raise EpisodeError(
+                f"transcript {path} turn {i} has invalid speaker "
+                f"{turn.get('speaker')!r}; must be HOST or GUEST"
+            )
+        text_val = turn.get("text")
+        if not isinstance(text_val, str) or not text_val.strip():
+            raise EpisodeError(f"transcript {path} turn {i} has empty text")
+    return turns
+
+
+def build_transcript_text(turns: list[dict]) -> str:
+    """Build the plain transcript the alignment API is given.
+
+    Joins turn texts in order with single spaces, strips ``[...]`` audio-tag
+    spans (so ``[laughs]`` never appears in the aligned text and never shows in
+    a caption), and collapses whitespace runs. No speaker labels, no JSON.
+    """
+    parts = [_AUDIO_TAG_RE.sub(" ", t["text"]) for t in turns]
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
+
+
+def _normalize_text(text: str) -> str:
+    """Unicode NFKC + casefold — the comparison form for speaker mapping."""
+    return unicodedata.normalize("NFKC", text).casefold()
+
+
+def attribute_speakers(api_words: list[dict], turns: list[dict]) -> list[str]:
+    """Map each API word to its source speaker by a character-consumption walk.
+
+    Does not assume the API tokenizes like we do. Both sides reduce to the same
+    NFKC+casefold character stream (whitespace removed); each API word consumes
+    the next characters of the source stream, and its speaker is the speaker of
+    the source span it consumed. Robust to the API splitting ``don't``,
+    ``co-founder``, ``3.14``, ``20%``, quotes, or ellipses differently.
+
+    Raises ``AlignmentError`` (naming the API word index/text and the source
+    token index/text) on any character divergence, a word straddling a speaker
+    change, or leftover characters on either side.
+    """
+    tokens: list[tuple[str, str]] = []  # (source token text, speaker)
+    for turn in turns:
+        stripped = _AUDIO_TAG_RE.sub(" ", turn["text"])
+        for tok in stripped.split():
+            tokens.append((tok, turn["speaker"]))
+
+    src_chars: list[str] = []
+    src_speaker: list[str] = []
+    src_tok: list[int] = []
+    for idx, (tok, speaker) in enumerate(tokens):
+        for ch in _normalize_text(tok):
+            src_chars.append(ch)
+            src_speaker.append(speaker)
+            src_tok.append(idx)
+
+    speakers: list[str] = []
+    pos = 0
+    for j, word in enumerate(api_words):
+        wtext = word["text"] if isinstance(word, dict) else word
+        norm = _normalize_text("".join(wtext.split()))
+        start = pos
+        for ch in norm:
+            if pos >= len(src_chars):
+                raise AlignmentError(
+                    f"alignment mismatch: API word {j} '{wtext}' runs past the "
+                    f"end of the transcript character stream — the audio and "
+                    f"script.json disagree; check the transcript, then re-fetch "
+                    f"with --refresh-alignment."
+                )
+            if src_chars[pos] != ch:
+                ti = src_tok[pos]
+                raise AlignmentError(
+                    f"alignment mismatch: API word {j} '{wtext}' diverges from "
+                    f"source token {ti} '{tokens[ti][0]}' (API char '{ch}' vs "
+                    f"source char '{src_chars[pos]}')."
+                )
+            pos += 1
+        if pos > start:
+            span = set(src_speaker[start:pos])
+            if len(span) > 1:
+                raise AlignmentError(
+                    f"alignment word {j} '{wtext}' straddles a speaker change — "
+                    f"words should never cross a HOST/GUEST boundary."
+                )
+            speakers.append(src_speaker[start])
+        elif start < len(src_speaker):
+            speakers.append(src_speaker[start])  # empty word: borrow next speaker
+        elif src_speaker:
+            speakers.append(src_speaker[-1])
+        else:
+            raise AlignmentError(f"alignment word {j} '{wtext}' has no source text")
+
+    if pos < len(src_chars):
+        ti = src_tok[pos]
+        remainder = "".join(src_chars[pos:])
+        raise AlignmentError(
+            f"alignment mismatch: {len(src_chars) - pos} source characters left "
+            f"unconsumed starting at token {ti} '{tokens[ti][0]}' (remainder "
+            f"'{remainder[:40]}') — the transcript and audio disagree; re-fetch "
+            f"with --refresh-alignment."
+        )
+    return speakers
+
+
+# ---------------------------------------------------------------------------
+# Forced-alignment client (the only network touch) + response parsing
+# ---------------------------------------------------------------------------
+
+
+def _encode_multipart(fields: dict, file_field: tuple, boundary: str) -> bytes:
+    """Build a ``multipart/form-data`` body by hand (stdlib only).
+
+    ``fields`` are text parts; ``file_field`` is ``(name, filename, bytes,
+    content_type)``. Mirrors the hand-rolled request style of the ElevenLabs
+    TTS call in ``publish.py`` (no third-party multipart dependency).
+    """
+    parts: list[bytes] = []
+    for name, value in fields.items():
+        parts.append(f"--{boundary}".encode("utf-8"))
+        parts.append(f'Content-Disposition: form-data; name="{name}"'.encode("utf-8"))
+        parts.append(b"")
+        parts.append(value.encode("utf-8"))
+    name, filename, data, content_type = file_field
+    parts.append(f"--{boundary}".encode("utf-8"))
+    parts.append(
+        f'Content-Disposition: form-data; name="{name}"; filename="{filename}"'.encode(
+            "utf-8"
+        )
+    )
+    parts.append(f"Content-Type: {content_type}".encode("utf-8"))
+    parts.append(b"")
+    parts.append(data)
+    parts.append(f"--{boundary}--".encode("utf-8"))
+    parts.append(b"")
+    return b"\r\n".join(parts)
+
+
+def _is_missing_permissions(body: bytes) -> bool:
+    """True if a 401 body carries ``detail.status == "missing_permissions"``."""
+    try:
+        data = json.loads(body.decode("utf-8", "replace"))
+    except (json.JSONDecodeError, ValueError):
+        return False
+    detail = data.get("detail") if isinstance(data, dict) else None
+    return isinstance(detail, dict) and detail.get("status") == "missing_permissions"
+
+
+def request_alignment(
+    audio_bytes: bytes, transcript_text: str, api_key: str, sleep=time.sleep
+) -> bytes:
+    """POST the audio + plain transcript to the Forced Alignment API.
+
+    Multipart body: ``file`` = the whole audio bytes, ``text`` = the tag-
+    stripped transcript. Three attempts total, sleeping 1 s then 2 s between
+    them; retries on HTTP 429, any 5xx, and transient ``URLError``. Any other
+    HTTP status fails immediately. Every final failure is wrapped in
+    ``AlignmentError`` (status/reason + hint; the API key is never echoed).
+    Called through the module-level ``urllib.request.urlopen`` unaliased so
+    tests can monkeypatch it, exactly like ``publish.elevenlabs_tts``.
+    """
+    boundary = "----agentfm-forced-alignment-boundary"
+    body = _encode_multipart(
+        {"text": transcript_text},
+        ("file", "audio", audio_bytes, "application/octet-stream"),
+        boundary,
+    )
+    headers = {
+        "xi-api-key": api_key,
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+
+    # Python 3.13 turned on VERIFY_X509_STRICT by default, which rejects some
+    # corporate-proxy CAs. Clear just the strict bit — verification stays on
+    # (copied from publish.py's ElevenLabs call; do not "clean up").
+    ctx = ssl.create_default_context()
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+
+    attempts = 3
+    for attempt in range(attempts):
+        req = urllib.request.Request(
+            _FORCED_ALIGNMENT_URL, data=body, headers=headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120, context=ctx) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = exc.read()
+            except Exception:  # noqa: BLE001 — body already consumed / closed
+                detail = b""
+            status = exc.code
+            if status == 401 and _is_missing_permissions(detail):
+                raise AlignmentError(
+                    "forced alignment failed: HTTP 401 — your ELEVENLABS_API_KEY "
+                    "lacks the Forced Alignment permission. Enable it for this "
+                    "key in the ElevenLabs dashboard (Profile → API Keys → edit "
+                    "permissions) and retry."
+                ) from exc
+            retryable = status == 429 or 500 <= status < 600
+            if retryable and attempt < attempts - 1:
+                sleep(_RETRY_SLEEPS[attempt])
+                continue
+            raise AlignmentError(
+                f"forced alignment failed: HTTP {status} {exc.reason} — check "
+                f"your ELEVENLABS_API_KEY and the audio/transcript, then retry "
+                f"(or render from an existing cache via --captions-json)."
+            ) from exc
+        except urllib.error.URLError as exc:
+            if attempt < attempts - 1:
+                sleep(_RETRY_SLEEPS[attempt])
+                continue
+            raise AlignmentError(
+                f"forced alignment network error: {exc.reason} — check your "
+                f"connection and retry, or render from an existing cached "
+                f"alignment JSON via --captions-json."
+            ) from exc
+    raise AlignmentError("forced alignment failed after all retries")  # unreachable
+
+
+def parse_alignment_words(raw) -> list[dict]:
+    """Parse + structurally validate the API response into ``words``.
+
+    Raises ``AlignmentError`` if the body is not JSON, has no list ``words``,
+    is empty, or holds a word with a non-string ``text`` or non-finite/negative
+    ``start``/``end``/``loss`` (or ``end < start``). Returns a list of
+    ``{text, start, end, loss}`` (speaker is attached later).
+    """
+    try:
+        data = json.loads(raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        raise AlignmentError(f"forced alignment response was not valid JSON: {exc}")
+    if not isinstance(data, dict) or "words" not in data:
+        raise AlignmentError("forced alignment response has no 'words' field")
+    words = data["words"]
+    if not isinstance(words, list):
+        raise AlignmentError("forced alignment 'words' field is not a list")
+    if not words:
+        raise AlignmentError("forced alignment returned an empty 'words' list")
+    out: list[dict] = []
+    for i, w in enumerate(words):
+        if not isinstance(w, dict):
+            raise AlignmentError(f"forced alignment word {i} is not an object")
+        text = w.get("text")
+        if not isinstance(text, str):
+            raise AlignmentError(f"forced alignment word {i} has no text string")
+        start = w.get("start")
+        end = w.get("end")
+        loss = w.get("loss", 0.0)
+        for label, value in (("start", start), ("end", end), ("loss", loss)):
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+            ):
+                raise AlignmentError(
+                    f"forced alignment word {i} has a non-finite {label}"
+                )
+        if start < 0 or end < start:
+            raise AlignmentError(
+                f"forced alignment word {i} has invalid times "
+                f"start={start} end={end}"
+            )
+        out.append(
+            {"text": text, "start": float(start), "end": float(end), "loss": float(loss)}
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Alignment cache (write / validate-on-load)
+# ---------------------------------------------------------------------------
+
+
+def _sha256_text(text: str) -> str:
+    """SHA-256 hex digest of ``text`` encoded UTF-8."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _read_audio_bytes(path) -> bytes:
+    """Read the whole audio file, raising ``AlignmentError`` naming the path."""
+    try:
+        return Path(path).read_bytes()
+    except OSError as exc:
+        raise AlignmentError(
+            f"could not read audio for alignment: {path} ({exc})"
+        ) from exc
+
+
+def write_alignment_cache(path, audio_sha: str, transcript_sha, words: list[dict]) -> None:
+    """Write the alignment cache JSON, raising ``AlignmentError`` on failure."""
+    payload = {
+        "version": _ALIGNMENT_CACHE_VERSION,
+        "audio_sha256": audio_sha,
+        "transcript_sha256": transcript_sha,
+        "words": words,
+    }
+    try:
+        Path(path).write_text(json.dumps(payload, indent=2) + "\n")
+    except OSError as exc:
+        raise AlignmentError(
+            f"could not write alignment cache to {path}: {exc}"
+        ) from exc
+
+
+def load_alignment_cache(path, audio_sha: str, transcript_sha=None) -> list[dict]:
+    """Load + validate the alignment cache, returning its ``words``.
+
+    Validates: JSON object; ``version == 1``; ``audio_sha256`` matches the
+    current audio (and ``transcript_sha256`` when a transcript is given); a
+    non-empty ``words`` list; every word has non-empty ``text``, finite
+    ``start``/``end`` with ``0 <= start <= end``, non-decreasing ``start``, and
+    ``speaker in {HOST, GUEST}``. Any failure raises ``AlignmentError`` naming
+    the cache path and pointing at ``--refresh-alignment`` — never a silent
+    re-fetch.
+    """
+    path = Path(path)
+    hint = f"pass --refresh-alignment (or delete {path}) to rebuild it"
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        raise AlignmentError(f"could not read alignment cache {path}: {exc} — {hint}")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise AlignmentError(
+            f"alignment cache {path} is corrupt (invalid JSON: {exc}) — {hint}"
+        )
+    if not isinstance(data, dict):
+        raise AlignmentError(f"alignment cache {path} is not a JSON object — {hint}")
+    if data.get("version") != _ALIGNMENT_CACHE_VERSION:
+        raise AlignmentError(
+            f"alignment cache {path} has unsupported version "
+            f"{data.get('version')!r} (expected {_ALIGNMENT_CACHE_VERSION}) — {hint}"
+        )
+    if data.get("audio_sha256") != audio_sha:
+        raise AlignmentError(
+            f"alignment cache {path} is stale: it was built for a different "
+            f"audio file — {hint}"
+        )
+    if transcript_sha is not None and data.get("transcript_sha256") != transcript_sha:
+        raise AlignmentError(
+            f"alignment cache {path} is stale: the transcript has changed since "
+            f"it was built — {hint}"
+        )
+    words = data.get("words")
+    if not isinstance(words, list) or not words:
+        raise AlignmentError(
+            f"alignment cache {path} has an empty or invalid 'words' list — {hint}"
+        )
+    prev_start = None
+    for i, w in enumerate(words):
+        if not isinstance(w, dict):
+            raise AlignmentError(f"alignment cache {path} word {i} is not an object — {hint}")
+        if not isinstance(w.get("text"), str) or not w["text"]:
+            raise AlignmentError(f"alignment cache {path} word {i} has empty text — {hint}")
+        start = w.get("start")
+        end = w.get("end")
+        for label, value in (("start", start), ("end", end)):
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or not math.isfinite(value)
+            ):
+                raise AlignmentError(
+                    f"alignment cache {path} word {i} has a non-finite {label} — {hint}"
+                )
+        if not (0.0 <= start <= end):
+            raise AlignmentError(
+                f"alignment cache {path} word {i} has invalid times "
+                f"start={start} end={end} — {hint}"
+            )
+        if prev_start is not None and start < prev_start:
+            raise AlignmentError(
+                f"alignment cache {path} word {i} starts before the previous "
+                f"word (starts must be non-decreasing) — {hint}"
+            )
+        prev_start = start
+        if w.get("speaker") not in ("HOST", "GUEST"):
+            raise AlignmentError(
+                f"alignment cache {path} word {i} has invalid speaker "
+                f"{w.get('speaker')!r} — {hint}"
+            )
+    return words
+
+
+def resolve_caption_words(audio_path, cache_path, transcript_path, refresh: bool):
+    """Return the full cached word list for captions, building the cache if needed.
+
+    Returns ``None`` when captions are off (no transcript and no cache file).
+    Otherwise loads a valid cache (no network), or — with a transcript and a
+    missing/``--refresh``-ed cache — fetches alignment, attributes speakers,
+    writes the cache, and returns the words. Raises ``ConfigError`` when a fetch
+    is required but ``ELEVENLABS_API_KEY`` is unset with no usable cache.
+    """
+    audio_path = Path(audio_path)
+    cache_path = Path(cache_path)
+    has_transcript = transcript_path is not None
+    if not has_transcript and not cache_path.exists():
+        return None  # captions off — no usable alignment source
+
+    transcript_turns = transcript_text = transcript_sha = None
+    if has_transcript:
+        transcript_turns = load_transcript(transcript_path)
+        transcript_text = build_transcript_text(transcript_turns)
+        transcript_sha = _sha256_text(transcript_text)
+
+    audio_bytes = _read_audio_bytes(audio_path)
+    audio_sha = hashlib.sha256(audio_bytes).hexdigest()
+
+    if cache_path.exists() and not refresh:
+        return load_alignment_cache(cache_path, audio_sha, transcript_sha)
+
+    if not has_transcript:
+        raise AlignmentError(
+            f"no alignment cache at {cache_path} — pass --transcript to build one"
+        )
+
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise ConfigError(
+            "ELEVENLABS_API_KEY is not set — add it to your .env file to fetch "
+            "word alignment, or point --captions-json at an existing valid "
+            "alignment JSON cache to render offline."
+        )
+
+    raw = request_alignment(audio_bytes, transcript_text, api_key)
+    api_words = parse_alignment_words(raw)
+    speakers = attribute_speakers(api_words, transcript_turns)
+    words = [
+        {
+            "text": w["text"],
+            "start": w["start"],
+            "end": w["end"],
+            "loss": w["loss"],
+            "speaker": sp,
+        }
+        for w, sp in zip(api_words, speakers)
+    ]
+    write_alignment_cache(cache_path, audio_sha, transcript_sha, words)
+    return words
+
+
+# ---------------------------------------------------------------------------
+# Caption block model (pure — window math, block build, cue timing)
+# ---------------------------------------------------------------------------
+
+
+def clip_words_to_window(words: list[dict], w0: float, w1: float) -> list[dict]:
+    """Keep words whose ``[start, end)`` overlaps ``[w0, w1)``, shifted to 0.
+
+    Kept words are copied with times shifted by ``-w0`` and clamped to
+    ``[0, w1 - w0]`` (so boundary-straddling words are trimmed to the window,
+    never dropped). The returned list is ordered like the input.
+    """
+    length = w1 - w0
+    out: list[dict] = []
+    for w in words:
+        if w["start"] < w1 and w["end"] > w0:  # half-open overlap
+            ns = min(max(w["start"] - w0, 0.0), length)
+            ne = min(max(w["end"] - w0, 0.0), length)
+            out.append({**w, "start": ns, "end": ne})
+    return out
+
+
+def _ends_block(text: str, word_count: int) -> bool:
+    """True if a word carrying ``text`` should close the current block.
+
+    Sentence enders (``. ? ! … —``) always close it; soft enders (``, ; :``)
+    close it only once the block already holds >= 3 words. Trailing closing
+    quotes/brackets are ignored before inspecting the final character.
+    """
+    core = text.rstrip(_TRAILING_PUNCT)
+    if not core:
+        return False
+    last = core[-1]
+    if last in _SENTENCE_ENDERS:
+        return True
+    return last in _SOFT_ENDERS and word_count >= 3
+
+
+def build_blocks(
+    words: list[dict], measure, max_width: float, max_words: int = _CAPTION_MAX_WORDS
+) -> list[list[dict]]:
+    """Group ordered (clipped) words into caption blocks.
+
+    A block never spans a speaker change; ends after a word carrying sentence
+    punctuation or an em-dash (or a comma/semicolon/colon once it has >= 3
+    words); and never exceeds ``max_words`` words or ``max_width`` rendered
+    px. ``measure(text)`` returns the rendered width of the space-joined block
+    text at caption size (injected so tests need no font); width or word count,
+    whichever bites first, forces the break.
+    """
+    blocks: list[list[dict]] = []
+    current: list[dict] = []
+    for word in words:
+        if current:
+            joined = " ".join(w["text"] for w in current + [word])
+            if (
+                word["speaker"] != current[-1]["speaker"]
+                or len(current) >= max_words
+                or measure(joined) > max_width
+            ):
+                blocks.append(current)
+                current = []
+        current.append(word)
+        if _ends_block(word["text"], len(current)):
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def compute_cues(blocks: list[list[dict]], window_end: float) -> list[tuple]:
+    """Return ``(in_cue, out_cue)`` seconds for each block, never overlapping.
+
+    Resolves the spec's cue formulas: the first block's in-cue is
+    ``max(first.start - 0.05, 0)``; between neighbours, a gap <= 0.25 s bridges
+    (the earlier caption stays up until the next appears, so short pauses never
+    flicker) while a genuine silence lets the caption clear at its last word's
+    end; every in-cue is >= the previous out-cue (swap in place, no overlap);
+    and all cues are clamped to ``[0, window_end]``.
+    """
+    n = len(blocks)
+    if n == 0:
+        return []
+    in_cues = [0.0] * n
+    out_cues = [0.0] * n
+    in_cues[0] = _clamp(blocks[0][0]["start"] - _CUE_LEAD, 0.0, window_end)
+    for i in range(n):
+        last_end = blocks[i][-1]["end"]
+        if i < n - 1:
+            early_next = blocks[i + 1][0]["start"] - _CUE_LEAD
+            provisional = early_next if (early_next - last_end) <= _CUE_BRIDGE else last_end
+            out_cues[i] = _clamp(max(provisional, in_cues[i]), 0.0, window_end)
+            in_cues[i + 1] = _clamp(max(early_next, out_cues[i]), 0.0, window_end)
+        else:
+            out_cues[i] = _clamp(max(last_end, in_cues[i]), 0.0, window_end)
+    return list(zip(in_cues, out_cues))
+
+
+def active_word_index(block: list[dict], t: float) -> int:
+    """Index of the lit word in a live ``block`` at window-local time ``t``.
+
+    The last word whose ``start - 0.075`` has passed (75 ms early-fire lead);
+    it stays lit through intra-block pauses until the next word fires. Defaults
+    to the first word (a live block always has one word past its lead).
+    """
+    idx = 0
+    for i, w in enumerate(block):
+        if w["start"] - _HIGHLIGHT_LEAD <= t:
+            idx = i
+        else:
+            break
+    return idx
+
+
+def _live_block(cues: list[tuple], t: float):
+    """Index of the block live at time ``t`` (``in_cue <= t < out_cue``), or None."""
+    for i, (in_cue, out_cue) in enumerate(cues):
+        if in_cue <= t < out_cue:
+            return i
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +1073,44 @@ def _draw_tracked(draw, text, font, tracking, center_x, top, fill):
         x += width + tracking
 
 
+def _draw_tracked_left(draw, text, font, tracking, left, top, fill):
+    """Draw ``text`` left-aligned from ``left`` with letter spacing.
+
+    The corner wordmark (captions-on) hugs the left inset instead of centering.
+    """
+    x = left
+    for ch in text:
+        draw.text((x, top), ch, font=font, fill=fill)
+        x += font.getlength(ch) + tracking
+
+
+def _promo_font_path(root: Path) -> Path:
+    """Return the committed Space Grotesk Bold path or raise ``ConfigError``."""
+    font_path = root / "artwork" / "fonts" / "SpaceGrotesk-Bold.ttf"
+    if not font_path.exists():
+        raise ConfigError(f"promo font missing: {font_path} (SpaceGrotesk-Bold.ttf)")
+    return font_path
+
+
+def _vertical_height(size: int) -> int:
+    """9:16 height for width ``size``: ``even(round(16·size/9))`` for yuv420p."""
+    h = round(16 * size / 9)
+    return h + 1 if h % 2 else h
+
+
+def _canvas_dims(size: int, fmt: str) -> tuple[int, int, int]:
+    """Return ``(width, height, core_top)`` for the requested format.
+
+    ``square``: ``size × size`` (``core_top`` 0). ``vertical``: ``size ×
+    even(round(16·size/9))`` with the centered ``size × size`` core offset
+    ``core_top`` down from the top edge.
+    """
+    if fmt == "vertical":
+        height = _vertical_height(size)
+        return size, height, round((height - size) / 2)
+    return size, size, 0
+
+
 def _font_for_cap_height(font_path, cap_px, image_font, ref: int = 200):
     """Return a Space Grotesk font sized so caps are about ``cap_px`` tall."""
     ref_font = image_font.truetype(str(font_path), ref)
@@ -424,58 +1136,125 @@ def _blend(fg, bg, opacity):
     return tuple(round(f * opacity + b * (1 - opacity)) for f, b in zip(fg, bg))
 
 
-def _build_base_frame(size: int, title, root: Path):
+def _build_base_frame(size: int, title, root: Path, captions_on: bool = False, fmt: str = "square"):
     """Compose the static base frame: ink ground + wordmark + optional title.
 
-    Raises ``ConfigError`` if the committed Space Grotesk Bold font is missing
-    or unreadable (mirrors make_cover's wording).
+    When captions are on the wordmark moves to the top-left corner at ~1/3 its
+    centered size (the caption band takes its old lower slot); without captions
+    the centered layout is unchanged. In ``vertical`` format the canvas is
+    ``size × even(round(16·size/9))`` and the mark/title reuse the square math
+    offset down by the core top. Raises ``ConfigError`` if the committed Space
+    Grotesk Bold font is missing or unreadable (mirrors make_cover's wording).
     """
     from PIL import Image, ImageDraw, ImageFont
 
-    font_path = root / "artwork" / "fonts" / "SpaceGrotesk-Bold.ttf"
-    if not font_path.exists():
-        raise ConfigError(
-            f"promo font missing: {font_path} (SpaceGrotesk-Bold.ttf)"
-        )
+    font_path = _promo_font_path(root)
+    width, height, core_top = _canvas_dims(size, fmt)
 
-    img = Image.new("RGB", (size, size), INK)
+    img = Image.new("RGB", (width, height), INK)
     draw = ImageDraw.Draw(img)
-    center_x = size / 2
+    center_x = width / 2
 
+    cap_frac = _CAPTION_WORDMARK_CAP_FRAC if captions_on else _WORDMARK_CAP_FRAC
     try:
-        wordmark_font = _font_for_cap_height(
-            font_path, _WORDMARK_CAP_FRAC * size, ImageFont
-        )
+        wordmark_font = _font_for_cap_height(font_path, cap_frac * size, ImageFont)
     except OSError as exc:
         raise ConfigError(
             f"promo font is unreadable or corrupt: {font_path} "
             f"(SpaceGrotesk-Bold.ttf) ({exc})"
         ) from exc
     tracking = _WORDMARK_TRACKING_EM * wordmark_font.size
-    _draw_tracked(
-        draw,
-        "AI AGENT FM",
-        wordmark_font,
-        tracking,
-        center_x,
-        round(_WORDMARK_TOP_FRAC * size),
-        IVORY,
-    )
+    if captions_on:
+        if fmt == "vertical":
+            wm_left = round(_VERTICAL_WORDMARK_XY[0] * size / _VERTICAL_REF)
+            wm_top = round(_VERTICAL_WORDMARK_XY[1] * size / _VERTICAL_REF)
+        else:
+            wm_left = round(_CAPTION_WORDMARK_LEFT_FRAC * size)
+            wm_top = round(_CAPTION_WORDMARK_TOP_FRAC * size)
+        _draw_tracked_left(draw, "AI AGENT FM", wordmark_font, tracking, wm_left, wm_top, IVORY)
+    else:
+        _draw_tracked(
+            draw,
+            "AI AGENT FM",
+            wordmark_font,
+            tracking,
+            center_x,
+            core_top + round(_WORDMARK_TOP_FRAC * size),
+            IVORY,
+        )
 
     if title:
         title_font = ImageFont.truetype(
             str(font_path), max(1, round(_TITLE_PT_FRAC * size))
         )
         text = _ellipsize(title, title_font, _TITLE_MAX_WIDTH_FRAC * size)
-        width = title_font.getlength(text)
+        text_width = title_font.getlength(text)
         draw.text(
-            (center_x - width / 2, round(_TITLE_TOP_FRAC * size)),
+            (center_x - text_width / 2, core_top + round(_TITLE_TOP_FRAC * size)),
             text,
             font=title_font,
             fill=_blend(IVORY, INK, _TITLE_OPACITY),
         )
 
     return img
+
+
+def _render_caption_tile(block, active_idx, caption_font, active_font, baseline_y, center_x):
+    """Render one ``(block, active_word_index)`` caption variant as an RGBA tile.
+
+    The whole phrase is drawn on one line, centered on ``center_x`` with its
+    baseline at ``baseline_y``; every word is ivory except the active word,
+    which is its speaker's accent (HOST amber / GUEST magenta) at 1.08x pt,
+    baseline-aligned. The tile is tightly cropped to the ink bounding box plus
+    a fixed 8 px margin; returns ``(tile, (paste_x, paste_y))`` so the caller
+    pastes it onto the full canvas.
+    """
+    from PIL import Image, ImageDraw
+
+    segments = []  # (text, font, fill_rgb)
+    for i, word in enumerate(block):
+        if i == active_idx:
+            font = active_font
+            fill = _HOST_ACCENT if word["speaker"] == "HOST" else _GUEST_ACCENT
+        else:
+            font = caption_font
+            fill = _CAPTION_IVORY
+        segments.append((word["text"], font, fill))
+
+    space_w = caption_font.getlength(" ")
+    advances = [font.getlength(text) for text, font, _ in segments]
+    total = sum(advances) + space_w * (len(segments) - 1)
+
+    placed = []  # (text, font, fill, pen_x)
+    xs, ys = [], []
+    pen = center_x - total / 2
+    for (text, font, fill), advance in zip(segments, advances):
+        left, top, right, bottom = font.getbbox(text, anchor="ls")
+        placed.append((text, font, fill, pen))
+        xs.extend((pen + left, pen + right))
+        ys.extend((baseline_y + top, baseline_y + bottom))
+        pen += advance + space_w
+
+    left = min(xs) - _CAPTION_TILE_MARGIN_PX
+    right = max(xs) + _CAPTION_TILE_MARGIN_PX
+    top = min(ys) - _CAPTION_TILE_MARGIN_PX
+    bottom = max(ys) + _CAPTION_TILE_MARGIN_PX
+    off_x = math.floor(left)
+    off_y = math.floor(top)
+    tile_w = max(1, math.ceil(right) - off_x)
+    tile_h = max(1, math.ceil(bottom) - off_y)
+
+    tile = Image.new("RGBA", (tile_w, tile_h), (0, 0, 0, 0))
+    tdraw = ImageDraw.Draw(tile)
+    for text, font, fill, pen_x in placed:
+        tdraw.text(
+            (pen_x - off_x, baseline_y - off_y),
+            text,
+            font=font,
+            fill=fill + (255,),
+            anchor="ls",
+        )
+    return tile, (off_x, off_y)
 
 
 # ---------------------------------------------------------------------------
@@ -500,9 +1279,13 @@ def decode_argv(audio_path: Path, start, duration) -> list[str]:
 
 
 def encode_argv(
-    out_path: Path, size: int, fps: int, audio_path: Path, start, duration
+    out_path: Path, width: int, height: int, fps: int, audio_path: Path, start, duration
 ) -> list[str]:
-    """Build the single-process encode argv (rawvideo stdin + muxed audio)."""
+    """Build the single-process encode argv (rawvideo stdin + muxed audio).
+
+    ``width``/``height`` size the raw input; square passes ``size, size`` and
+    vertical passes ``size, even(round(16·size/9))``.
+    """
     argv = [
         "ffmpeg",
         "-y",
@@ -511,7 +1294,7 @@ def encode_argv(
         "-pix_fmt",
         "rgb24",
         "-s",
-        f"{size}x{size}",
+        f"{width}x{height}",
         "-r",
         str(fps),
         "-i",
@@ -588,23 +1371,75 @@ def build_promo(
     duration,
     title,
     root: Path,
+    words=None,
+    fmt: str = "square",
 ) -> None:
     """Render the promo video for ``audio_path`` to ``out_path``.
 
     Decodes the audio to an energy envelope, precomputes the gradient layer,
     cone mask, and static base frame, then streams one rendered frame per
     envelope value as raw rgb24 into a single ffmpeg encode that muxes the
-    (trimmed) audio. Deterministic: same input → same frames. Every
+    (trimmed) audio. When ``words`` (the full cached alignment) is given and
+    the trim window contains at least one word, burned-in word-synced captions
+    are composited beneath the cone; ``fmt`` selects ``square`` or ``vertical``
+    (9:16). Deterministic: same input + same alignment → same frames. Every
     user-facing failure raises an ``AgentFMError`` subclass.
     """
     samples = _decode_audio(audio_path, start, duration)
     envelope = compute_envelope(samples, fps)
 
-    base = _build_base_frame(size, title, root)
+    width, height, core_top = _canvas_dims(size, fmt)
+    center_x = width / 2
+
+    # Caption preparation: clip the alignment to the trim window, build blocks
+    # and cues, and load the caption fonts. A window with no caption words is a
+    # warning (not an error) — the render simply carries no captions.
+    captions_on = words is not None
+    caption_blocks: list = []
+    caption_cues: list = []
+    caption_font = active_font = None
+    baseline_y = None
+    if captions_on:
+        w0 = start or 0.0
+        window_secs = len(samples) / _DECODE_RATE
+        clipped = clip_words_to_window(words, w0, w0 + window_secs)
+        if not clipped:
+            print(
+                f"warning: no caption words fall inside the trim window "
+                f"[{w0:g}, {w0 + window_secs:g}] s — rendering {out_path.name} "
+                f"without captions",
+                file=sys.stderr,
+            )
+            captions_on = False
+        else:
+            from PIL import ImageFont
+
+            font_path = _promo_font_path(root)
+            caption_pt = max(1, round(_CAPTION_PT_FRAC * size))
+            active_pt = max(1, round(caption_pt * _CAPTION_ACTIVE_SCALE))
+            try:
+                caption_font = ImageFont.truetype(str(font_path), caption_pt)
+                active_font = ImageFont.truetype(str(font_path), active_pt)
+            except OSError as exc:
+                raise ConfigError(
+                    f"promo font is unreadable or corrupt: {font_path} "
+                    f"(SpaceGrotesk-Bold.ttf) ({exc})"
+                ) from exc
+            max_width = _CAPTION_MAX_WIDTH_FRAC * size
+            caption_blocks = build_blocks(
+                clipped, caption_font.getlength, max_width
+            )
+            caption_cues = compute_cues(caption_blocks, window_secs)
+            if fmt == "vertical":
+                baseline_y = round(_VERTICAL_CAPTION_BASELINE * size / _VERTICAL_REF)
+            else:
+                baseline_y = round(_CAPTION_BASELINE_FRAC * size)
+
+    base = _build_base_frame(size, title, root, captions_on=captions_on, fmt=fmt)
 
     mark_px = round(_MARK_BOX_FRAC * size)
-    mark_left = round((size - mark_px) / 2)
-    mark_top = round(_MARK_TOP_FRAC * size)
+    mark_left = round((width - mark_px) / 2)
+    mark_top = core_top + round(_MARK_TOP_FRAC * size)
     mark_scale = mark_px / _CANVAS
     anchor = (_TIP_ANCHOR[0] * mark_scale, _TIP_ANCHOR[1] * mark_scale)
 
@@ -616,7 +1451,7 @@ def build_promo(
         center = (mark_px / 2, mark_px / 2)
     layer = build_gradient_layer(mark_px, anchor)
 
-    argv = encode_argv(out_path, size, fps, audio_path, start, duration)
+    argv = encode_argv(out_path, width, height, fps, audio_path, start, duration)
     stderr_file = tempfile.TemporaryFile()
     try:
         proc = subprocess.Popen(
@@ -627,8 +1462,10 @@ def build_promo(
         raise AudioError("ffmpeg not found — brew install ffmpeg")
 
     cache: dict[int, tuple] = {}
+    caption_cache: dict[int, tuple] = {}
+    cur_block = -1
     try:
-        for e in envelope:
+        for i, e in enumerate(envelope):
             level = round(e * (_QUANT_LEVELS - 1))
             tile = cache.get(level)
             if tile is None:
@@ -638,6 +1475,25 @@ def build_promo(
             img, (dx, dy) = tile
             frame = base.copy()
             frame.paste(img, (mark_left + dx, mark_top + dy), img)
+
+            if captions_on:
+                t = i / fps
+                bidx = _live_block(caption_cues, t)
+                if bidx is not None:
+                    if bidx != cur_block:
+                        caption_cache = {}  # bounded memory: current block only
+                        cur_block = bidx
+                    aidx = active_word_index(caption_blocks[bidx], t)
+                    ctile = caption_cache.get(aidx)
+                    if ctile is None:
+                        ctile = _render_caption_tile(
+                            caption_blocks[bidx], aidx, caption_font,
+                            active_font, baseline_y, center_x,
+                        )
+                        caption_cache[aidx] = ctile
+                    cap_img, (cx, cy) = ctile
+                    frame.paste(cap_img, (cx, cy), cap_img)
+
             proc.stdin.write(frame.tobytes())
     except BrokenPipeError:
         pass  # ffmpeg died early; the return code below surfaces the reason.
@@ -695,7 +1551,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="promo_video.py", description=__doc__)
     parser.add_argument("audio", help="path to the input audio clip")
     parser.add_argument(
-        "-o", "--output", required=True, help="output MP4 path"
+        "-o", "--output", default=None, help="output MP4 path (not needed with --align-only)"
     )
     parser.add_argument(
         "--start", type=_nonneg_float, default=None, help="trim start (seconds)"
@@ -710,11 +1566,64 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--size", type=_pos_int, default=1080, help="square side in px (default 1080)"
     )
+    parser.add_argument(
+        "--transcript",
+        default=None,
+        help="episode script.json — required to create or refresh an alignment cache",
+    )
+    parser.add_argument(
+        "--captions-json",
+        default=None,
+        help="alignment cache path (default <audio stem>.alignment.json)",
+    )
+    parser.add_argument(
+        "--refresh-alignment",
+        action="store_true",
+        help="ignore any existing cache and re-fetch alignment (needs --transcript)",
+    )
+    parser.add_argument(
+        "--align-only",
+        action="store_true",
+        help="fetch + cache alignment, print stats, and exit without rendering",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("square", "vertical"),
+        default="square",
+        help="output format: square (default) or vertical 9:16",
+    )
     args = parser.parse_args(argv)
 
+    if args.align_only and not args.transcript:
+        parser.error("--align-only requires --transcript")
+    if args.refresh_alignment and not args.transcript:
+        parser.error("--refresh-alignment requires --transcript")
+    if not args.align_only and not args.output:
+        parser.error("-o/--output is required unless --align-only is given")
+
+    audio_path = Path(args.audio)
+    transcript_path = Path(args.transcript) if args.transcript else None
+    if args.captions_json:
+        cache_path = Path(args.captions_json)
+    else:
+        cache_path = audio_path.with_suffix(".alignment.json")
+
+    load_env(root / ".env")
+
     try:
+        words = resolve_caption_words(
+            audio_path, cache_path, transcript_path, args.refresh_alignment
+        )
+
+        if args.align_only:
+            losses = [w["loss"] for w in words]
+            mean_loss = sum(losses) / len(losses)
+            print(f"aligned {len(words)} words → {cache_path}")
+            print(f"per-word loss: mean {mean_loss:.4f}, max {max(losses):.4f}")
+            return 0
+
         build_promo(
-            Path(args.audio),
+            audio_path,
             Path(args.output),
             args.size,
             args.fps,
@@ -722,6 +1631,8 @@ def main(argv: list[str] | None = None) -> int:
             args.duration,
             args.title,
             root,
+            words=words,
+            fmt=args.format,
         )
     except AgentFMError as exc:
         print(f"error: {exc}", file=sys.stderr)
