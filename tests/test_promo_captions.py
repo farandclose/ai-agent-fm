@@ -234,16 +234,38 @@ def test_request_alignment_posts_multipart(monkeypatch):
     def fake_urlopen(req, timeout=None, context=None):
         captured["url"] = req.full_url
         captured["key"] = req.get_header("Xi-api-key")
+        captured["content_type"] = req.get_header("Content-type")
         captured["body"] = req.data
         return _FakeResponse(b'{"words": []}')
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    out = promo_video.request_alignment(b"AUDIODATA", "hello world", "k-secret")
+    # A non-ASCII transcript proves the body is UTF-8 encoded (not latin-1).
+    transcript = "héllo wörld — café"
+    out = promo_video.request_alignment(b"AUDIODATA", transcript, "k-secret")
     assert out == b'{"words": []}'
     assert captured["url"] == "https://api.elevenlabs.io/v1/forced-alignment"
     assert captured["key"] == "k-secret"
-    assert b"AUDIODATA" in captured["body"]
-    assert b"hello world" in captured["body"]
+
+    # Content-Type is multipart/form-data with a boundary token.
+    ctype = captured["content_type"]
+    assert ctype.startswith("multipart/form-data; boundary=")
+    boundary = ctype.split("boundary=", 1)[1]
+    assert boundary  # non-empty (uuid-based)
+
+    body = captured["body"]
+    bb = boundary.encode("ascii")
+    # Full boundary framing with CRLF structure: opening line, closing sentinel.
+    assert body.startswith(b"--" + bb + b"\r\n")
+    assert body.endswith(b"--" + bb + b"--\r\n")
+    # Each part header is CRLF-delimited and blank-line separated from its value.
+    assert b'\r\nContent-Disposition: form-data; name="text"\r\n\r\n' in body
+    assert (
+        b'\r\nContent-Disposition: form-data; name="file"; filename="audio"\r\n'
+        b"Content-Type: application/octet-stream\r\n\r\n"
+    ) in body
+    # File bytes and the UTF-8-encoded transcript both ride in the body.
+    assert b"AUDIODATA" in body
+    assert transcript.encode("utf-8") in body
 
 
 def test_request_alignment_retries_429_then_succeeds(monkeypatch):
@@ -648,6 +670,41 @@ def _write_wav(path, seconds=1.0, rate=48000, freq=220):
         w.writeframes(bytes(frames))
 
 
+def _extract_frame(mp4, t):
+    """Decode one frame at ``t`` seconds from ``mp4`` into a PIL RGB image."""
+    import subprocess
+
+    from PIL import Image
+
+    png = mp4.with_name(mp4.stem + "-frame.png")
+    r = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(mp4), "-ss", str(t), "-frames:v", "1", str(png)],
+        capture_output=True,
+    )
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")[-800:]
+    return Image.open(png).convert("RGB")
+
+
+def _caption_band_nonink_pixels(img, baseline_y, cap_px):
+    """Count pixels in the caption band (just above ``baseline_y``) far from ink.
+
+    yuv420p round-trips ink with a few units of noise, so a generous threshold
+    cleanly separates flat ground from ivory/amber/magenta caption glyphs.
+    """
+    width, height = img.size
+    px = img.load()
+    top = max(0, baseline_y - cap_px)
+    bottom = min(height, baseline_y)
+    ink = promo_video.INK
+    count = 0
+    for y in range(top, bottom):
+        for x in range(width):
+            r, g, b = px[x, y]
+            if abs(r - ink[0]) + abs(g - ink[1]) + abs(b - ink[2]) > 60:
+                count += 1
+    return count
+
+
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
 @pytest.mark.parametrize("fmt", ["square", "vertical"])
 def test_end_to_end_captioned_smoke(tmp_path, fmt):
@@ -661,13 +718,42 @@ def test_end_to_end_captioned_smoke(tmp_path, fmt):
         {"text": "friend.", "start": 0.6, "end": 0.95, "loss": 0.05, "speaker": "GUEST"},
     ]
     promo_video.write_alignment_cache(cache, audio_sha, "ignored", words)
-    out = tmp_path / "promo.mp4"
+
+    size = 160
+    captioned = tmp_path / "promo.mp4"
     rc = promo_video.main([
-        str(wav), "-o", str(out), "--captions-json", str(cache),
-        "--size", "64", "--fps", "6", "--format", fmt, "--title", "Smoke",
+        str(wav), "-o", str(captioned), "--captions-json", str(cache),
+        "--size", str(size), "--fps", "6", "--format", fmt, "--title", "Smoke",
     ])
     assert rc == 0
-    assert out.exists() and out.stat().st_size > 1000
+    assert captioned.exists() and captioned.stat().st_size > 1000
+
+    # Control render of the same clip with captions OFF (cache path absent).
+    plain = tmp_path / "plain.mp4"
+    rc_plain = promo_video.main([
+        str(wav), "-o", str(plain),
+        "--captions-json", str(tmp_path / "absent.alignment.json"),
+        "--size", str(size), "--fps", "6", "--format", fmt, "--title", "Smoke",
+    ])
+    assert rc_plain == 0
+
+    width, height, _ = promo_video._canvas_dims(size, fmt)
+    cap_frame = _extract_frame(captioned, 0.25)
+    plain_frame = _extract_frame(plain, 0.25)
+    # Output dimensions are probed from a decoded frame (even, yuv420p-safe).
+    assert cap_frame.size == (width, height)
+    assert plain_frame.size == (width, height)
+
+    if fmt == "vertical":
+        baseline_y = round(promo_video._VERTICAL_CAPTION_BASELINE * size / promo_video._VERTICAL_REF)
+    else:
+        baseline_y = round(promo_video._CAPTION_BASELINE_FRAC * size)
+    cap_px = max(1, round(promo_video._CAPTION_PT_FRAC * size))
+
+    # At a cue time the caption band carries ink-contrasting glyphs; the
+    # uncaptioned render's identical band is pure ground.
+    assert _caption_band_nonink_pixels(cap_frame, baseline_y, cap_px) > 0
+    assert _caption_band_nonink_pixels(plain_frame, baseline_y, cap_px) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -718,4 +804,281 @@ def test_render_requires_output_unless_align_only(tmp_path):
     audio.write_bytes(b"AUDIOBYTES")
     with pytest.raises(SystemExit) as excinfo:
         promo_video.main([str(audio)])
+    assert excinfo.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Finding 1 — caption line layout is stable: static words never move when the
+# highlight (drawn 1.08x) advances.
+# ---------------------------------------------------------------------------
+
+
+def _caption_fonts(base_pt=40):
+    from PIL import ImageFont
+
+    font_path = REPO_ROOT / "artwork" / "fonts" / "SpaceGrotesk-Bold.ttf"
+    caption_font = ImageFont.truetype(str(font_path), base_pt)
+    active_pt = max(1, round(base_pt * promo_video._CAPTION_ACTIVE_SCALE))
+    active_font = ImageFont.truetype(str(font_path), active_pt)
+    return caption_font, active_font
+
+
+def test_caption_static_word_positions_stable_across_active_index():
+    caption_font, active_font = _caption_fonts()
+    block = [_w(t, "HOST") for t in ("alpha", "beta", "gamma", "delta", "epsilon")]
+    center_x = 500.0
+    variants = {
+        a: promo_video._caption_word_placements(block, caption_font, active_font, a, center_x)
+        for a in range(len(block))
+    }
+    # For each word, its draw_x must be pixel-identical across every variant in
+    # which it is NOT the active (1.08x) word.
+    for word_i in range(len(block)):
+        positions = {
+            round(variants[a][word_i][2], 9)
+            for a in range(len(block))
+            if a != word_i
+        }
+        assert len(positions) == 1, f"word {word_i} moved across variants: {positions}"
+
+
+def test_caption_active_word_centered_in_base_cell():
+    caption_font, active_font = _caption_fonts()
+    block = [_w(t, "HOST") for t in ("alpha", "beta", "gamma")]
+    center_x = 500.0
+    base = promo_video._caption_word_placements(block, caption_font, active_font, active_idx=-1, center_x=center_x)
+    for i, word in enumerate(block):
+        variant = promo_video._caption_word_placements(block, caption_font, active_font, i, center_x)
+        base_pen = base[i][2]
+        base_adv = caption_font.getlength(word["text"])
+        active_adv = active_font.getlength(word["text"])
+        expected = base_pen + (base_adv - active_adv) / 2
+        assert variant[i][2] == pytest.approx(expected)
+        # The active word is drawn with the larger font.
+        assert variant[i][1] is active_font
+
+
+# ---------------------------------------------------------------------------
+# Finding 2 — empty/whitespace-only API words are dropped before caching.
+# ---------------------------------------------------------------------------
+
+
+def test_empty_api_words_dropped_before_cache(tmp_path, monkeypatch):
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"AUDIOBYTES")
+    audio_sha = hashlib.sha256(b"AUDIOBYTES").hexdigest()
+    transcript = tmp_path / "script.json"
+    transcript.write_text(json.dumps({"turns": [{"speaker": "HOST", "text": "hello world"}]}))
+    tsha = promo_video._sha256_text(
+        promo_video.build_transcript_text([{"speaker": "HOST", "text": "hello world"}])
+    )
+    cache = tmp_path / "clip.alignment.json"
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k-test")
+
+    def fake_request(audio_bytes, transcript_text, api_key, sleep=None):
+        return json.dumps({"words": [
+            {"text": "hello", "start": 0.0, "end": 0.4, "loss": 0.1},
+            {"text": "", "start": 0.4, "end": 0.4, "loss": 0.0},
+            {"text": " ", "start": 0.45, "end": 0.45, "loss": 0.0},
+            {"text": "world", "start": 0.5, "end": 0.9, "loss": 0.2},
+        ]}).encode()
+
+    monkeypatch.setattr(promo_video, "request_alignment", fake_request)
+    words = promo_video.resolve_caption_words(audio, cache, transcript, refresh=False)
+    assert [w["text"] for w in words] == ["hello", "world"]
+    # The poison words never reach the cache, so it reloads cleanly (no
+    # empty-text validation failure and no re-fetch on the next run).
+    reloaded = promo_video.load_alignment_cache(cache, audio_sha, tsha)
+    assert [w["text"] for w in reloaded] == ["hello", "world"]
+
+
+# ---------------------------------------------------------------------------
+# Finding 3 — fresh responses are ordering-checked exactly like the cache.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_alignment_words_unordered_starts_raises():
+    raw = json.dumps({"words": [
+        {"text": "a", "start": 1.0, "end": 1.5, "loss": 0.0},
+        {"text": "b", "start": 0.5, "end": 1.0, "loss": 0.0},  # start goes backwards
+    ]}).encode()
+    with pytest.raises(promo_video.AlignmentError, match="non-decreasing"):
+        promo_video.parse_alignment_words(raw)
+
+
+def test_parse_alignment_words_negative_start_raises():
+    raw = json.dumps({"words": [{"text": "a", "start": -0.1, "end": 0.5, "loss": 0.0}]}).encode()
+    with pytest.raises(promo_video.AlignmentError):
+        promo_video.parse_alignment_words(raw)
+
+
+# ---------------------------------------------------------------------------
+# Finding 5 — TimeoutError is transient (retried) and finally wrapped.
+# ---------------------------------------------------------------------------
+
+
+def test_request_alignment_timeout_retries_then_wraps(monkeypatch):
+    calls = {"n": 0}
+    slept = []
+
+    def fake_urlopen(req, timeout=None, context=None):
+        calls["n"] += 1
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(promo_video.AlignmentError) as excinfo:
+        promo_video.request_alignment(b"A", "t", "k-secret", sleep=lambda s: slept.append(s))
+    assert calls["n"] == 3
+    assert slept == [1.0, 2.0]
+    assert "k-secret" not in str(excinfo.value)
+
+
+def test_request_alignment_timeout_during_read_then_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    class _TimeoutOnRead:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            raise TimeoutError("read timed out")
+
+    def fake_urlopen(req, timeout=None, context=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _TimeoutOnRead()
+        return _FakeResponse(b'{"words": [1]}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    out = promo_video.request_alignment(b"A", "t", "k", sleep=lambda s: None)
+    assert out == b'{"words": [1]}'
+    assert calls["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Finding 6 — loss required on fresh responses; tolerated absent in a cache.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_alignment_words_missing_loss_raises():
+    raw = json.dumps({"words": [{"text": "hi", "start": 0.0, "end": 0.5}]}).encode()
+    with pytest.raises(promo_video.AlignmentError, match="loss"):
+        promo_video.parse_alignment_words(raw)
+
+
+def test_parse_alignment_words_boolean_loss_raises():
+    raw = json.dumps(
+        {"words": [{"text": "hi", "start": 0.0, "end": 0.5, "loss": True}]}
+    ).encode()
+    with pytest.raises(promo_video.AlignmentError, match="loss"):
+        promo_video.parse_alignment_words(raw)
+
+
+def test_align_only_tolerates_cache_without_loss(tmp_path, monkeypatch, capsys):
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"AUDIOBYTES")
+    audio_sha = hashlib.sha256(b"AUDIOBYTES").hexdigest()
+    transcript = tmp_path / "script.json"
+    transcript.write_text(json.dumps({"turns": [{"speaker": "HOST", "text": "hello world"}]}))
+    tsha = promo_video._sha256_text(
+        promo_video.build_transcript_text([{"speaker": "HOST", "text": "hello world"}])
+    )
+    cache = tmp_path / "clip.alignment.json"
+    # Hand-written cache whose words carry NO loss field (valid otherwise).
+    cache.write_text(json.dumps({
+        "version": 1, "audio_sha256": audio_sha, "transcript_sha256": tsha,
+        "words": [
+            {"text": "hello", "start": 0.0, "end": 0.4, "speaker": "HOST"},
+            {"text": "world", "start": 0.4, "end": 0.9, "speaker": "HOST"},
+        ],
+    }))
+
+    def boom(*a, **k):
+        raise AssertionError("must not fetch with a valid cache")
+
+    monkeypatch.setattr(promo_video, "request_alignment", boom)
+    rc = promo_video.main([
+        str(audio), "--transcript", str(transcript),
+        "--captions-json", str(cache), "--align-only",
+    ])
+    assert rc == 0
+    assert "mean 0.0000" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Finding 7 — non-UTF-8 transcript/cache files raise wrapped errors.
+# ---------------------------------------------------------------------------
+
+
+def test_transcript_non_utf8_raises_episode_error(tmp_path):
+    p = tmp_path / "script.json"
+    p.write_bytes(b"\xff\xfe\x00 not valid utf-8 \x80\x81")
+    with pytest.raises(promo_video.EpisodeError, match="script.json"):
+        promo_video.load_transcript(p)
+
+
+def test_cache_non_utf8_raises_alignment_error(tmp_path):
+    cache = tmp_path / "clip.alignment.json"
+    cache.write_bytes(b"\xff\xfe\x00 not valid utf-8 \x80\x81")
+    with pytest.raises(promo_video.AlignmentError, match="refresh-alignment"):
+        promo_video.load_alignment_cache(cache, "ASHA")
+
+
+# ---------------------------------------------------------------------------
+# Finding 4 — the caption window uses the explicit --duration, not the decoded
+# sample count.
+# ---------------------------------------------------------------------------
+
+
+def test_duration_window_uses_explicit_duration(tmp_path, monkeypatch):
+    captured = {}
+    _fake_subprocess(monkeypatch, captured)
+    seen = {}
+    orig = promo_video.clip_words_to_window
+
+    def spy(words, w0, w1):
+        seen["w0"], seen["w1"] = w0, w1
+        return orig(words, w0, w1)
+
+    monkeypatch.setattr(promo_video, "clip_words_to_window", spy)
+    audio = tmp_path / "in.mp3"
+    audio.write_bytes(b"")
+    out = tmp_path / "out.mp4"
+    # The fake decode yields exactly 1.0 s of samples; --duration says 2.0 s.
+    # A word ending exactly on the 2.0 s boundary must fall inside the window.
+    words = [{"text": "edge", "start": 1.9, "end": 2.0, "loss": 0.0, "speaker": "HOST"}]
+    promo_video.build_promo(
+        audio, out, size=32, fps=4, start=0.0, duration=2.0,
+        title=None, root=REPO_ROOT, words=words, fmt="square",
+    )
+    assert seen["w1"] == pytest.approx(2.0)  # explicit duration wins over 1.0 s decoded
+    # And the boundary word survives the clip (would be dropped at w1 = 1.0).
+    assert promo_video.clip_words_to_window(words, 0.0, 2.0)[0]["text"] == "edge"
+
+
+# ---------------------------------------------------------------------------
+# Finding 8 — an odd --size is rejected at the CLI (both formats).
+# ---------------------------------------------------------------------------
+
+
+def test_odd_size_rejected(tmp_path):
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"AUDIOBYTES")
+    out = tmp_path / "out.mp4"
+    with pytest.raises(SystemExit) as excinfo:
+        promo_video.main([str(audio), "-o", str(out), "--size", "65"])
+    assert excinfo.value.code == 2
+
+
+def test_odd_size_rejected_vertical(tmp_path):
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"AUDIOBYTES")
+    out = tmp_path / "out.mp4"
+    with pytest.raises(SystemExit) as excinfo:
+        promo_video.main(
+            [str(audio), "-o", str(out), "--size", "65", "--format", "vertical"]
+        )
     assert excinfo.value.code == 2

@@ -38,6 +38,7 @@ import json
 import math
 import os
 import re
+import socket
 import ssl
 import subprocess
 import sys
@@ -46,6 +47,7 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 from publish import AgentFMError, AudioError, ConfigError, EpisodeError, load_env
@@ -316,9 +318,13 @@ def load_transcript(path) -> list[dict]:
     """
     path = Path(path)
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise EpisodeError(f"transcript not found: {path}")
+    except UnicodeDecodeError as exc:
+        raise EpisodeError(
+            f"transcript {path} is not valid UTF-8 text: {exc}"
+        ) from exc
     except OSError as exc:
         raise EpisodeError(f"could not read transcript {path}: {exc}") from exc
     try:
@@ -493,7 +499,7 @@ def request_alignment(
     Called through the module-level ``urllib.request.urlopen`` unaliased so
     tests can monkeypatch it, exactly like ``publish.elevenlabs_tts``.
     """
-    boundary = "----agentfm-forced-alignment-boundary"
+    boundary = "----agentfm-" + uuid.uuid4().hex
     body = _encode_multipart(
         {"text": transcript_text},
         ("file", "audio", audio_bytes, "application/octet-stream"),
@@ -540,6 +546,19 @@ def request_alignment(
                 f"your ELEVENLABS_API_KEY and the audio/transcript, then retry "
                 f"(or render from an existing cache via --captions-json)."
             ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            # A bare timeout — notably during response.read() — is transient and
+            # is neither an HTTPError nor a URLError (socket.timeout is an alias
+            # of TimeoutError on 3.10+). Retry under the same policy and wrap the
+            # final failure so it honors the AgentFMError contract.
+            if attempt < attempts - 1:
+                sleep(_RETRY_SLEEPS[attempt])
+                continue
+            raise AlignmentError(
+                "forced alignment timed out — check your connection and retry, "
+                "or render from an existing cached alignment JSON via "
+                "--captions-json."
+            ) from exc
         except urllib.error.URLError as exc:
             if attempt < attempts - 1:
                 sleep(_RETRY_SLEEPS[attempt])
@@ -556,9 +575,12 @@ def parse_alignment_words(raw) -> list[dict]:
     """Parse + structurally validate the API response into ``words``.
 
     Raises ``AlignmentError`` if the body is not JSON, has no list ``words``,
-    is empty, or holds a word with a non-string ``text`` or non-finite/negative
-    ``start``/``end``/``loss`` (or ``end < start``). Returns a list of
-    ``{text, start, end, loss}`` (speaker is attached later).
+    is empty, or holds a word with a non-string ``text``; a missing or
+    non-numeric/non-finite ``start``, ``end``, or ``loss``; times violating
+    ``0 <= start <= end``; or a ``start`` earlier than the previous word (starts
+    must be non-decreasing — the same rules ``load_alignment_cache`` applies, so
+    a fresh response that renders once can never be rejected on reload). Returns
+    a list of ``{text, start, end, loss}`` (speaker is attached later).
     """
     try:
         data = json.loads(raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw)
@@ -572,6 +594,7 @@ def parse_alignment_words(raw) -> list[dict]:
     if not words:
         raise AlignmentError("forced alignment returned an empty 'words' list")
     out: list[dict] = []
+    prev_start = None
     for i, w in enumerate(words):
         if not isinstance(w, dict):
             raise AlignmentError(f"forced alignment word {i} is not an object")
@@ -580,7 +603,7 @@ def parse_alignment_words(raw) -> list[dict]:
             raise AlignmentError(f"forced alignment word {i} has no text string")
         start = w.get("start")
         end = w.get("end")
-        loss = w.get("loss", 0.0)
+        loss = w.get("loss")
         for label, value in (("start", start), ("end", end), ("loss", loss)):
             if (
                 not isinstance(value, (int, float))
@@ -588,13 +611,19 @@ def parse_alignment_words(raw) -> list[dict]:
                 or not math.isfinite(value)
             ):
                 raise AlignmentError(
-                    f"forced alignment word {i} has a non-finite {label}"
+                    f"forced alignment word {i} has a missing or non-numeric {label}"
                 )
         if start < 0 or end < start:
             raise AlignmentError(
                 f"forced alignment word {i} has invalid times "
                 f"start={start} end={end}"
             )
+        if prev_start is not None and start < prev_start:
+            raise AlignmentError(
+                f"forced alignment word {i} starts before the previous word "
+                f"(start={start} < {prev_start}); starts must be non-decreasing"
+            )
+        prev_start = start
         out.append(
             {"text": text, "start": float(start), "end": float(end), "loss": float(loss)}
         )
@@ -651,7 +680,11 @@ def load_alignment_cache(path, audio_sha: str, transcript_sha=None) -> list[dict
     path = Path(path)
     hint = f"pass --refresh-alignment (or delete {path}) to rebuild it"
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise AlignmentError(
+            f"alignment cache {path} is not valid UTF-8 text ({exc}) — {hint}"
+        )
     except OSError as exc:
         raise AlignmentError(f"could not read alignment cache {path}: {exc} — {hint}")
     try:
@@ -761,6 +794,12 @@ def resolve_caption_words(audio_path, cache_path, transcript_path, refresh: bool
     raw = request_alignment(audio_bytes, transcript_text, api_key)
     api_words = parse_alignment_words(raw)
     speakers = attribute_speakers(api_words, transcript_turns)
+    # Drop empty/whitespace-only API words before caching or rendering. The
+    # attribution walk tolerates them (its borrow branch assigns a speaker
+    # without consuming characters), but they render as invisible caption
+    # "words" and — because load_alignment_cache rejects empty text — would
+    # poison the cache: a fetched empty word renders once, then every reload
+    # fails validation and --refresh-alignment just re-fetches the same poison.
     words = [
         {
             "text": w["text"],
@@ -770,6 +809,7 @@ def resolve_caption_words(audio_path, cache_path, transcript_path, refresh: bool
             "speaker": sp,
         }
         for w, sp in zip(api_words, speakers)
+        if w["text"].strip()
     ]
     write_alignment_cache(cache_path, audio_sha, transcript_sha, words)
     return words
@@ -1199,41 +1239,64 @@ def _build_base_frame(size: int, title, root: Path, captions_on: bool = False, f
     return img
 
 
+def _caption_word_placements(block, caption_font, active_font, active_idx, center_x):
+    """Per-word ``(text, font, draw_x)`` for one caption variant, laid out once.
+
+    Pure and font-only (no rendering) so it is directly testable. Every word's
+    pen position comes from the BASE caption font's advance — never the active
+    word's inflated 1.08x advance — so a static word's ``draw_x`` is *identical*
+    for every ``active_idx``; the highlight never nudges its neighbours by even
+    a pixel. The active word is drawn with ``active_font`` centered inside its
+    base advance cell (``pen + (base_advance - active_advance) / 2``), so the
+    scale pop grows symmetrically about the word without shifting the line.
+    """
+    space_w = caption_font.getlength(" ")
+    base_advances = [caption_font.getlength(word["text"]) for word in block]
+    total = sum(base_advances) + space_w * (len(block) - 1) if block else 0.0
+    placements = []
+    pen = center_x - total / 2
+    for i, word in enumerate(block):
+        base_adv = base_advances[i]
+        if i == active_idx:
+            font = active_font
+            draw_x = pen + (base_adv - active_font.getlength(word["text"])) / 2
+        else:
+            font = caption_font
+            draw_x = pen
+        placements.append((word["text"], font, draw_x))
+        pen += base_adv + space_w
+    return placements
+
+
 def _render_caption_tile(block, active_idx, caption_font, active_font, baseline_y, center_x):
     """Render one ``(block, active_word_index)`` caption variant as an RGBA tile.
 
     The whole phrase is drawn on one line, centered on ``center_x`` with its
     baseline at ``baseline_y``; every word is ivory except the active word,
     which is its speaker's accent (HOST amber / GUEST magenta) at 1.08x pt,
-    baseline-aligned. The tile is tightly cropped to the ink bounding box plus
-    a fixed 8 px margin; returns ``(tile, (paste_x, paste_y))`` so the caller
-    pastes it onto the full canvas.
+    baseline-aligned. Word positions come from ``_caption_word_placements`` (base
+    advances only) so static words never move as the highlight advances. The
+    tile is tightly cropped to the ink bounding box plus a fixed 8 px margin;
+    returns ``(tile, (paste_x, paste_y))`` so the caller pastes it onto the full
+    canvas.
     """
     from PIL import Image, ImageDraw
 
-    segments = []  # (text, font, fill_rgb)
-    for i, word in enumerate(block):
-        if i == active_idx:
-            font = active_font
-            fill = _HOST_ACCENT if word["speaker"] == "HOST" else _GUEST_ACCENT
-        else:
-            font = caption_font
-            fill = _CAPTION_IVORY
-        segments.append((word["text"], font, fill))
+    placements = _caption_word_placements(
+        block, caption_font, active_font, active_idx, center_x
+    )
 
-    space_w = caption_font.getlength(" ")
-    advances = [font.getlength(text) for text, font, _ in segments]
-    total = sum(advances) + space_w * (len(segments) - 1)
-
-    placed = []  # (text, font, fill, pen_x)
+    placed = []  # (text, font, fill, draw_x)
     xs, ys = [], []
-    pen = center_x - total / 2
-    for (text, font, fill), advance in zip(segments, advances):
+    for i, (text, font, draw_x) in enumerate(placements):
+        if i == active_idx:
+            fill = _HOST_ACCENT if block[i]["speaker"] == "HOST" else _GUEST_ACCENT
+        else:
+            fill = _CAPTION_IVORY
         left, top, right, bottom = font.getbbox(text, anchor="ls")
-        placed.append((text, font, fill, pen))
-        xs.extend((pen + left, pen + right))
+        placed.append((text, font, fill, draw_x))
+        xs.extend((draw_x + left, draw_x + right))
         ys.extend((baseline_y + top, baseline_y + bottom))
-        pen += advance + space_w
 
     left = min(xs) - _CAPTION_TILE_MARGIN_PX
     right = max(xs) + _CAPTION_TILE_MARGIN_PX
@@ -1401,7 +1464,14 @@ def build_promo(
     baseline_y = None
     if captions_on:
         w0 = start or 0.0
-        window_secs = len(samples) / _DECODE_RATE
+        # The spec mandates w1 = w0 + duration when --duration is given. The
+        # decoded sample count is subject to ffmpeg's trim quantization (a few
+        # samples either way), which can shift right-boundary word inclusion, so
+        # it only defines the window when no explicit --duration was passed.
+        if duration is not None:
+            window_secs = duration
+        else:
+            window_secs = len(samples) / _DECODE_RATE
         clipped = clip_words_to_window(words, w0, w0 + window_secs)
         if not clipped:
             print(
@@ -1539,6 +1609,23 @@ def _pos_int(text: str) -> int:
     return value
 
 
+def _even_pos_int(text: str) -> int:
+    """Argparse type for ``--size``: a positive, even integer.
+
+    libx264's yuv420p needs even width and height. An odd square is directly
+    unencodable, and a vertical whose width is odd would fail in ffmpeg too, so
+    both formats reject an odd size up front with a clear message.
+    """
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    if value % 2:
+        raise argparse.ArgumentTypeError(
+            "must be even — libx264 yuv420p needs even dimensions"
+        )
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point.
 
@@ -1564,7 +1651,11 @@ def main(argv: list[str] | None = None) -> int:
         "--fps", type=_pos_int, default=30, help="frames per second (default 30)"
     )
     parser.add_argument(
-        "--size", type=_pos_int, default=1080, help="square side in px (default 1080)"
+        "--size",
+        type=_even_pos_int,
+        default=1080,
+        help="canvas width in px, must be even (default 1080); square is S×S, "
+        "vertical is S×even(round(16·S/9))",
     )
     parser.add_argument(
         "--transcript",
@@ -1616,7 +1707,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         if args.align_only:
-            losses = [w["loss"] for w in words]
+            # A hand-written cache may omit loss (load_alignment_cache does not
+            # require it); default to 0.0 so the stats line never KeyErrors.
+            losses = [w.get("loss", 0.0) for w in words]
             mean_loss = sum(losses) / len(losses)
             print(f"aligned {len(words)} words → {cache_path}")
             print(f"per-word loss: mean {mean_loss:.4f}, max {max(losses):.4f}")
