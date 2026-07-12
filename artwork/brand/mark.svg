@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">AI Agent FM mark — Spectrum Cone, arc blend</title>
+  <desc id="desc">Hold-and-blend spectrum radiating from the source point: the gradient is radial, centered on the tip circle, so every color seam is a concentric arc around the source. Transparent ground.</desc>
+  <defs>
+    <radialGradient id="brand-spectrum-arc" gradientUnits="userSpaceOnUse" cx="512" cy="792" r="546">
+      <stop offset="0"     stop-color="#ef4938"/>
+      <stop offset="0.159" stop-color="#ef4938"/>
+      <stop offset="0.232" stop-color="#f39a2b"/>
+      <stop offset="0.381" stop-color="#f39a2b"/>
+      <stop offset="0.454" stop-color="#c83c88"/>
+      <stop offset="0.586" stop-color="#c83c88"/>
+      <stop offset="0.660" stop-color="#704fbc"/>
+      <stop offset="0.766" stop-color="#704fbc"/>
+      <stop offset="0.839" stop-color="#285db5"/>
+      <stop offset="1"     stop-color="#285db5"/>
+    </radialGradient>
+    <clipPath id="brand-cone-inner-arc">
+      <path d="M233.5 246H790.5Q804.5 246 797.6 260.5L539.1 804.9A30 30 0 0 1 484.9 804.9L226.4 260.5Q219.5 246 233.5 246Z"/>
+    </clipPath>
+  </defs>
+  <path d="M206 216H818Q852 216 834 253.9L566.2 817.7A60 60 0 0 1 457.8 817.7L190 253.9Q172 216 206 216Z" fill="#101228"/>
+  <g clip-path="url(#brand-cone-inner-arc)">
+    <rect x="172" y="216" width="680" height="640" fill="url(#brand-spectrum-arc)"/>
+  </g>
+</svg>

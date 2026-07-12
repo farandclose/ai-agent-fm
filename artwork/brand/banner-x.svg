@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="500" viewBox="0 0 1500 500" role="img" aria-label="AI Agent FM">
+  <defs>
+    <radialGradient id="spectrum-arc" gradientUnits="userSpaceOnUse" cx="512" cy="792" r="546">
+      <stop offset="0"     stop-color="#ef4938"/>
+      <stop offset="0.159" stop-color="#ef4938"/>
+      <stop offset="0.232" stop-color="#f39a2b"/>
+      <stop offset="0.381" stop-color="#f39a2b"/>
+      <stop offset="0.454" stop-color="#c83c88"/>
+      <stop offset="0.586" stop-color="#c83c88"/>
+      <stop offset="0.660" stop-color="#704fbc"/>
+      <stop offset="0.766" stop-color="#704fbc"/>
+      <stop offset="0.839" stop-color="#285db5"/>
+      <stop offset="1"     stop-color="#285db5"/>
+    </radialGradient>
+    <clipPath id="cone-inner">
+      <path d="M233.5 246H790.5Q804.5 246 797.6 260.5L539.1 804.9A30 30 0 0 1 484.9 804.9L226.4 260.5Q219.5 246 233.5 246Z"/>
+    </clipPath>
+  </defs>
+  <rect width="1500" height="500" fill="#101228"/>
+  <g transform="translate(950.40 -217.60) scale(0.80000)">
+    <g clip-path="url(#cone-inner)">
+      <rect x="172" y="216" width="680" height="640" fill="url(#spectrum-arc)"/>
+    </g>
+  </g>
+  <path transform="translate(64.00 107.40)" fill="#F4F0E6" d="M1.12 0 12.52 -43.4H26.78L38.19 0H29.76L27.4 -9.55H11.9L9.55 0ZM13.83 -17.11H25.48L20.21 -38.25H19.1ZM48.36 0V-43.4H56.54V0Z"/>
+  <path transform="translate(64.00 186.40)" fill="#F4F0E6" d="M1.12 0 12.52 -43.4H26.78L38.19 0H29.76L27.4 -9.55H11.9L9.55 0ZM13.83 -17.11H25.48L20.21 -38.25H19.1ZM62.99 0.87Q58.53 0.87 54.9 -1.15Q51.27 -3.16 49.14 -7.04Q47 -10.91 47 -16.49V-26.91Q47 -35.28 51.71 -39.77Q56.42 -44.27 64.48 -44.27Q72.48 -44.27 76.85 -40.02Q81.22 -35.77 81.22 -28.52V-28.27H73.16V-28.77Q73.16 -32.24 71.02 -34.6Q68.88 -36.95 64.48 -36.95Q60.14 -36.95 57.66 -34.29Q55.18 -31.62 55.18 -27.03V-16.37Q55.18 -11.84 57.66 -9.08Q60.14 -6.32 64.6 -6.32Q69.07 -6.32 71.11 -8.68Q73.16 -11.04 73.16 -14.63V-15.25H62.87V-22.2H81.22V0H73.66V-4.15H72.54Q72.11 -3.1 71.14 -1.92Q70.18 -0.74 68.26 0.06Q66.34 0.87 62.99 0.87ZM93.99 0V-43.4H121.89V-35.96H102.18V-25.61H120.16V-18.17H102.18V-7.44H122.26V0ZM133.3 0V-43.4H148.86L157.48 -5.58H158.6V-43.4H166.66V0H151.09L142.48 -37.82H141.36V0ZM189.84 0V-35.96H177.2V-43.4H210.68V-35.96H198.03V0Z"/>
+  <path transform="translate(64.00 265.40)" fill="#F4F0E6" d="M4.09 0V-43.4H31.37V-35.96H12.28V-25.48H29.88V-18.04H12.28V0ZM42.16 0V-43.4H57.35L64.85 -5.58H65.97L73.47 -43.4H88.66V0H80.72V-37.39H79.61L72.17 0H58.65L51.21 -37.39H50.1V0Z"/>
+</svg>

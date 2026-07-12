@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">AI Agent FM app icon — ivory tile, arc blend</title>
+  <desc>Ivory ground: full mark (ink keyline + radial spectrum-arc fill) at canonical position. Geometry and gradient stops copied verbatim from docs/design/spectrum-cone-v2/BRAND-SPEC.md.</desc>
+  <defs>
+    <radialGradient id="spectrum-arc" gradientUnits="userSpaceOnUse" cx="512" cy="792" r="546">
+      <stop offset="0"     stop-color="#ef4938"/>
+      <stop offset="0.159" stop-color="#ef4938"/>
+      <stop offset="0.232" stop-color="#f39a2b"/>
+      <stop offset="0.381" stop-color="#f39a2b"/>
+      <stop offset="0.454" stop-color="#c83c88"/>
+      <stop offset="0.586" stop-color="#c83c88"/>
+      <stop offset="0.660" stop-color="#704fbc"/>
+      <stop offset="0.766" stop-color="#704fbc"/>
+      <stop offset="0.839" stop-color="#285db5"/>
+      <stop offset="1"     stop-color="#285db5"/>
+    </radialGradient>
+    <clipPath id="cone-inner-iv">
+      <path d="M233.5 246H790.5Q804.5 246 797.6 260.5L539.1 804.9A30 30 0 0 1 484.9 804.9L226.4 260.5Q219.5 246 233.5 246Z"/>
+    </clipPath>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="#f4f0e6"/>
+  <path d="M206 216H818Q852 216 834 253.9L566.2 817.7A60 60 0 0 1 457.8 817.7L190 253.9Q172 216 206 216Z" fill="#101228"/>
+  <g clip-path="url(#cone-inner-iv)">
+    <rect x="172" y="216" width="680" height="640" fill="url(#spectrum-arc)"/>
+  </g>
+</svg>

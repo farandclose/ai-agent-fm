@@ -21,8 +21,13 @@ docs/superpowers/
 docs/ideation/
 
 # local discussion and review artifacts
+# (docs/design/ stays local except BRAND-SPEC.md — the committed brand assets
+# in artwork/brand/ can't be regenerated without it)
 artwork/sample-logo.png
-docs/design/
+docs/design/*
+!docs/design/spectrum-cone-v2
+docs/design/spectrum-cone-v2/*
+!docs/design/spectrum-cone-v2/BRAND-SPEC.md
 docs/design/human-harness-visual-directions.png
 docs/episode-opening-frame.md
 docs/episode-opening-shaping.md

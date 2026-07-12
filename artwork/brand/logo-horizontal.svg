@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1689" height="380" viewBox="0 0 1689 380" role="img" aria-labelledby="title desc">
+  <title id="title">AI Agent FM — horizontal lockup</title>
+  <desc id="desc">Spectrum Cone arc mark at left, outlined Space Grotesk Bold wordmark "AI AGENT FM" at right. Transparent ground.</desc>
+  <defs>
+    <radialGradient id="brand-spectrum-arc" gradientUnits="userSpaceOnUse" cx="512" cy="792" r="546">
+      <stop offset="0"     stop-color="#ef4938"/>
+      <stop offset="0.159" stop-color="#ef4938"/>
+      <stop offset="0.232" stop-color="#f39a2b"/>
+      <stop offset="0.381" stop-color="#f39a2b"/>
+      <stop offset="0.454" stop-color="#c83c88"/>
+      <stop offset="0.586" stop-color="#c83c88"/>
+      <stop offset="0.660" stop-color="#704fbc"/>
+      <stop offset="0.766" stop-color="#704fbc"/>
+      <stop offset="0.839" stop-color="#285db5"/>
+      <stop offset="1"     stop-color="#285db5"/>
+    </radialGradient>
+    <clipPath id="brand-cone-inner-arc">
+      <path d="M233.5 246H790.5Q804.5 246 797.6 260.5L539.1 804.9A30 30 0 0 1 484.9 804.9L226.4 260.5Q219.5 246 233.5 246Z"/>
+    </clipPath>
+  </defs>
+  <!-- Mark: canonical geometry scaled so the cone stands 300 px tall, top-left pad 40. -->
+  <g transform="translate(-41.13 -61.89) scale(0.471698)">
+    <path d="M206 216H818Q852 216 834 253.9L566.2 817.7A60 60 0 0 1 457.8 817.7L190 253.9Q172 216 206 216Z" fill="#101228"/>
+    <g clip-path="url(#brand-cone-inner-arc)">
+      <rect x="172" y="216" width="680" height="640" fill="url(#brand-spectrum-arc)"/>
+    </g>
+  </g>
+  <!-- Wordmark: Space Grotesk Bold outlines, cap height 120 (40% of mark height), baseline y=190. -->
+  <path fill="#101228" d="M463.84 190.00 495.38 70.00H534.81L566.35 190.00H543.04L536.52 163.60H493.66L487.15 190.00ZM498.98 142.69H531.21L516.64 84.23H513.55Z M597.89 190.00V70.00H620.52V190.00Z M712.75 190.00 744.29 70.00H783.72L815.26 190.00H791.95L785.44 163.60H742.58L736.06 190.00ZM747.89 142.69H780.12L765.55 84.23H762.46Z M888.29 192.40Q875.95 192.40 865.92 186.83Q855.89 181.26 849.98 170.54Q844.06 159.83 844.06 144.40V115.60Q844.06 92.46 857.09 80.03Q870.12 67.60 892.41 67.60Q914.52 67.60 926.61 79.34Q938.69 91.09 938.69 111.14V111.83H916.41V110.46Q916.41 100.86 910.49 94.34Q904.58 87.83 892.41 87.83Q880.41 87.83 873.55 95.20Q866.69 102.57 866.69 115.26V144.74Q866.69 157.26 873.55 164.89Q880.41 172.51 892.75 172.51Q905.09 172.51 910.75 166.00Q916.41 159.49 916.41 149.54V147.83H887.95V128.63H938.69V190.00H917.78V178.51H914.69Q913.49 181.43 910.84 184.69Q908.18 187.94 902.86 190.17Q897.55 192.40 888.29 192.40Z M977.44 190.00V70.00H1054.58V90.57H1000.06V119.20H1049.78V139.77H1000.06V169.43H1055.61V190.00Z M1089.55 190.00V70.00H1132.58L1156.41 174.57H1159.49V70.00H1181.78V190.00H1138.75L1114.92 85.43H1111.84V190.00Z M1249.32 190.00V90.57H1214.35V70.00H1306.92V90.57H1271.95V190.00Z M1400.18 190.00V70.00H1475.61V90.57H1422.81V119.54H1471.49V140.11H1422.81V190.00Z M1508.86 190.00V70.00H1550.86L1571.61 174.57H1574.69L1595.44 70.00H1637.44V190.00H1615.49V86.63H1612.41L1591.84 190.00H1554.46L1533.89 86.63H1530.81V190.00Z"/>
+</svg>

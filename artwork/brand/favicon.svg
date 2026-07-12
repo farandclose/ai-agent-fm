@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">AI Agent FM favicon — monochrome slit reduction</title>
+  <desc>One-ink cone with transparent slits: a single ink path using fill-rule evenodd, following the mark-mono.svg construction. Favicon-specific deviation, per the spec's small-size rule ("bands merged to three" below 48 px): the four canonical 22-unit slits are merged to three 80-unit slits centered at y = 365, 535, 705, because the canonical four-slit rhythm aliases to gray at 16 px. Slit subpaths are pre-intersected with the inner clip path, so their slanted left/right edges follow the inner cone sides; the slits are transparent (the page shows through) rather than ivory-filled.</desc>
+  <path fill="#101228" fill-rule="evenodd" d="M206 216H818Q852 216 834 253.9L566.2 817.7A60 60 0 0 1 457.8 817.7L190 253.9Q172 216 206 216Z
+    M257.03 325H766.97L728.99 405H295.01Z
+    M337.75 495H686.25L648.27 575H375.73Z
+    M418.47 665H605.53L567.54 745H456.46Z"/>
+</svg>

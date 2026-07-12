@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">AI Agent FM app icon — ink tile, arc blend</title>
+  <desc>Ink ground: keyline dropped per spec — only the clipped radial spectrum-arc fill; the ground reads as the keyline. Geometry and gradient stops copied verbatim from docs/design/spectrum-cone-v2/BRAND-SPEC.md.</desc>
+  <defs>
+    <radialGradient id="spectrum-arc-ink" gradientUnits="userSpaceOnUse" cx="512" cy="792" r="546">
+      <stop offset="0"     stop-color="#ef4938"/>
+      <stop offset="0.159" stop-color="#ef4938"/>
+      <stop offset="0.232" stop-color="#f39a2b"/>
+      <stop offset="0.381" stop-color="#f39a2b"/>
+      <stop offset="0.454" stop-color="#c83c88"/>
+      <stop offset="0.586" stop-color="#c83c88"/>
+      <stop offset="0.660" stop-color="#704fbc"/>
+      <stop offset="0.766" stop-color="#704fbc"/>
+      <stop offset="0.839" stop-color="#285db5"/>
+      <stop offset="1"     stop-color="#285db5"/>
+    </radialGradient>
+    <clipPath id="cone-inner-ik">
+      <path d="M233.5 246H790.5Q804.5 246 797.6 260.5L539.1 804.9A30 30 0 0 1 484.9 804.9L226.4 260.5Q219.5 246 233.5 246Z"/>
+    </clipPath>
+  </defs>
+  <rect width="1024" height="1024" rx="232" fill="#101228"/>
+  <g clip-path="url(#cone-inner-ik)">
+    <rect x="172" y="216" width="680" height="640" fill="url(#spectrum-arc-ink)"/>
+  </g>
+</svg>
