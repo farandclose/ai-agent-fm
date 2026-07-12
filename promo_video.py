@@ -5,8 +5,10 @@ LinkedIn-ready MP4: the Spectrum Cone brand mark on a flat ink ground, its
 radial arc gradient pulsing outward from the source point in sync with the
 audio, the wordmark, and the audio muxed in. Optionally it burns in
 word-synced captions beneath the cone (whole phrase in ivory, the spoken word
-recolored per speaker — HOST amber / GUEST magenta — with a scale pop) and can
-render a vertical 9:16 master alongside the default square.
+recolored per speaker — HOST amber / GUEST magenta — with a scale pop in the
+single-line ``swap`` style, color-only in the multi-line styles; the scrolling
+``three-line`` window is the default) and can render a vertical 9:16 master
+alongside the default square.
 
     # one-time (sub-cent): fetch + cache word alignment for an episode
     uv run promo_video.py episodes/<ep>/episode.mp3 \
@@ -150,6 +152,19 @@ _CAPTION_ACTIVE_SCALE = 1.08  # active word rendered at 1.08x the base pt
 _CAPTION_BASELINE_FRAC = 0.76  # square: baseline y / S
 _VERTICAL_CAPTION_BASELINE = 1160  # vertical: baseline y at S = 1080
 _CAPTION_TILE_MARGIN_PX = 8  # fixed margin around each cropped caption tile
+
+# Multi-line caption window (--caption-style two-line/three-line). Slots are
+# indexed in pitch units from the focus baseline: baseline(slot) = focus +
+# slot * pitch, with slot 0 = focus, -1 = catch-up above, +1 = read-ahead
+# below. Context (prev/next) lines are a smaller, dimmed single color. Numbers
+# verified against rendered frames in the caption-window delta spec — never
+# re-derive.
+_CAPTION_LINE_PITCH_FRAC = 0.078  # baseline-to-baseline slot pitch / S
+_CAPTION_CONTEXT_SCALE = 0.85  # context-line font = 0.85x the base caption pt
+_CAPTION_CONTEXT_OPACITY = 0.45  # context ivory pre-blended over ink (cf. title 0.70)
+_CAPTION_SCROLL_DUR = 0.25  # s; cubic ease-out slide on a same-speaker advance
+_VERTICAL_CAPTION_BASELINE_2LINE = 1120  # vertical focus baseline, two-line, at S = 1080
+_VERTICAL_CAPTION_BASELINE_3LINE = 1104  # vertical focus baseline, three-line, at S = 1080
 
 _CAPTION_IVORY = IVORY  # base phrase color #F4F0E6
 _HOST_ACCENT = (0xF3, 0x9A, 0x2B)  # amber #f39a2b — HOST active word
@@ -890,15 +905,29 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def compute_cues(blocks: list[list[dict]], window_end: float) -> list[tuple]:
+def compute_cues(
+    blocks: list[list[dict]], window_end: float, bridge: str = "gap"
+) -> list[tuple]:
     """Return ``(in_cue, out_cue)`` seconds for each block, never overlapping.
 
-    Resolves the spec's cue formulas: the first block's in-cue is
-    ``max(first.start - 0.05, 0)``; between neighbours, a gap <= 0.25 s bridges
-    (the earlier caption stays up until the next appears, so short pauses never
-    flicker) while a genuine silence lets the caption clear at its last word's
-    end; every in-cue is >= the previous out-cue (swap in place, no overlap);
-    and all cues are clamped to ``[0, window_end]``.
+    The first block's in-cue is ``max(first.start - 0.05, 0)``; every in-cue is
+    ``>=`` the previous out-cue (no overlap); all cues are clamped to
+    ``[0, window_end]``. Only the out-cue *bridge* rule between neighbours
+    depends on ``bridge``:
+
+    - ``"gap"`` (default — today's rule, byte-identical): a gap <= 0.25 s
+      bridges (the earlier caption stays up until the next appears, so short
+      pauses never flicker) while a genuine silence lets the caption clear at
+      its last word's end. Speaker is irrelevant.
+    - ``"speaker"`` (the ``two-line``/``three-line`` window styles): same-speaker
+      neighbours ALWAYS bridge regardless of gap (the earlier window holds
+      through the pause, then slides — the planner's contiguity test then reads
+      every intra-turn advance as a scroll); different-speaker neighbours NEVER
+      bridge (out-cue = the last word's end), so a turn change always flushes
+      the window and leaves whatever blank the audio gives.
+
+    Leads, clamps, and the ``in-cue = max(early_next, prev out)`` rule are the
+    same in both modes.
     """
     n = len(blocks)
     if n == 0:
@@ -910,7 +939,11 @@ def compute_cues(blocks: list[list[dict]], window_end: float) -> list[tuple]:
         last_end = blocks[i][-1]["end"]
         if i < n - 1:
             early_next = blocks[i + 1][0]["start"] - _CUE_LEAD
-            provisional = early_next if (early_next - last_end) <= _CUE_BRIDGE else last_end
+            if bridge == "speaker":
+                bridged = _same_speaker(blocks, i, i + 1)
+            else:
+                bridged = (early_next - last_end) <= _CUE_BRIDGE
+            provisional = early_next if bridged else last_end
             out_cues[i] = _clamp(max(provisional, in_cues[i]), 0.0, window_end)
             in_cues[i + 1] = _clamp(max(early_next, out_cues[i]), 0.0, window_end)
         else:
@@ -940,6 +973,105 @@ def _live_block(cues: list[tuple], t: float):
         if in_cue <= t < out_cue:
             return i
     return None
+
+
+# ---------------------------------------------------------------------------
+# Multi-line caption window planner (pure — blocks + cues + style + t -> lines)
+# ---------------------------------------------------------------------------
+
+
+def _ease_out_cubic(u: float) -> float:
+    """Cubic ease-out ``e(u) = 1 - (1 - u)**3`` over ``u`` in ``[0, 1]``."""
+    return 1.0 - (1.0 - u) ** 3
+
+
+def _block_speaker(block: list[dict]) -> str:
+    """Speaker of a block (a block never spans a speaker change, so any word)."""
+    return block[0]["speaker"]
+
+
+def _same_speaker(blocks: list, a: int, b: int) -> bool:
+    """True if blocks ``a`` and ``b`` both exist and share a speaker."""
+    if not (0 <= a < len(blocks) and 0 <= b < len(blocks)):
+        return False
+    return _block_speaker(blocks[a]) == _block_speaker(blocks[b])
+
+
+def _bridged(cues: list[tuple], i: int) -> bool:
+    """contiguous(i): block ``i`` bridges from ``i-1`` (out_cue[i-1] == in_cue[i])."""
+    return i > 0 and cues[i - 1][1] == cues[i][0]
+
+
+def _next_shown(blocks: list, i: int) -> bool:
+    """Whether block ``i+1`` shows as the read-ahead line of block ``i``."""
+    return _same_speaker(blocks, i, i + 1)
+
+
+def _prev_shown(blocks: list, cues: list[tuple], i: int) -> bool:
+    """Whether block ``i-1`` shows as the catch-up line of block ``i``.
+
+    Requires the bridge from ``i-1`` to have fired (no dark gap) *and* the two
+    blocks to share a speaker — so a speaker turn or a post-silence restart
+    flushes the catch-up line.
+    """
+    return _bridged(cues, i) and _same_speaker(blocks, i, i - 1)
+
+
+def plan_caption_lines(blocks: list, cues: list[tuple], style: str, t: float) -> list[tuple]:
+    """Plan the caption window's lines at window-local time ``t`` (pure).
+
+    Returns a list of ``(block_index, kind, slot, alpha)`` where ``kind`` is
+    ``"focus"`` or ``"context"``, ``slot`` is the baseline offset in pitch units
+    (0 = focus, -1 = catch-up above, +1 = read-ahead below; fractional while a
+    slide is in flight), and ``alpha`` in ``[0, 1]`` scales the pasted tile.
+    Returns ``[]`` when no block is live. ``swap`` always emits exactly one
+    ``(i, "focus", 0, 1)`` — today's behavior. ``two-line``/``three-line``
+    resolve the window content from the next/prev rules and, on a contiguous
+    same-speaker block advance, the cubic ease-out scroll (the Apple-Music-
+    lyrics "up and up"). Fonts, Pillow, and ffmpeg are never touched, so every
+    case is a direct unit test.
+    """
+    i = _live_block(cues, t)
+    if i is None:
+        return []
+    if style == "swap":
+        return [(i, "focus", 0.0, 1.0)]
+
+    in_i, out_i = cues[i]
+    prev_same = _prev_shown(blocks, cues, i)
+    dur = min(_CAPTION_SCROLL_DUR, out_i - in_i)
+    sliding = prev_same and dur > 0.0 and t < in_i + dur
+
+    if sliding:
+        u = _clamp((t - in_i) / dur, 0.0, 1.0)
+        rise = 1.0 - _ease_out_cubic(u)  # shared slot offset of the sliding stack
+        e = _ease_out_cubic(u)
+        plans: list[tuple] = []
+        # Old prev (block i-2) leaves the top, fading — three-line only, and
+        # only if it was the catch-up line of block i-1.
+        if style == "three-line" and _prev_shown(blocks, cues, i - 1):
+            plans.append((i - 2, "context", -2.0 + rise, rise))
+        # Old focus (block i-1) rises into the catch-up slot.
+        if style == "three-line":
+            plans.append((i - 1, "context", -1.0 + rise, 1.0))
+        else:  # two-line: the old focus leaves entirely, fading.
+            plans.append((i - 1, "context", -1.0 + rise, rise))
+        # New next (block i+1) fades in in place at slot +1 (no slide-in — a
+        # slide from below would cross the title band).
+        if _next_shown(blocks, i):
+            plans.append((i + 1, "context", 1.0, e))
+        # New focus (block i) rises from +1 to 0; kept last so it draws on top.
+        plans.append((i, "focus", 0.0 + rise, 1.0))
+        return plans
+
+    # Steady state: prev (three-line), focus, next in that order.
+    plans = []
+    if style == "three-line" and prev_same:
+        plans.append((i - 1, "context", -1.0, 1.0))
+    plans.append((i, "focus", 0.0, 1.0))
+    if _next_shown(blocks, i):
+        plans.append((i + 1, "context", 1.0, 1.0))
+    return plans
 
 
 # ---------------------------------------------------------------------------
@@ -1151,6 +1283,39 @@ def _canvas_dims(size: int, fmt: str) -> tuple[int, int, int]:
     return size, size, 0
 
 
+def _caption_focus_baseline(size: int, fmt: str, style: str) -> int:
+    """Focus-line baseline y (px) for the format and caption style.
+
+    Square keeps the base ``0.76·S`` baseline for every style. Vertical uses the
+    per-style union-safe baseline given at ``S = 1080`` (swap 1160, two-line
+    1120, three-line 1104 — chosen so the whole line stack clears the cone above
+    and the title below), scaled by ``S/1080`` like the other vertical
+    coordinates.
+    """
+    if fmt == "vertical":
+        ref = {
+            "swap": _VERTICAL_CAPTION_BASELINE,
+            "two-line": _VERTICAL_CAPTION_BASELINE_2LINE,
+            "three-line": _VERTICAL_CAPTION_BASELINE_3LINE,
+        }[style]
+        return round(ref * size / _VERTICAL_REF)
+    return round(_CAPTION_BASELINE_FRAC * size)
+
+
+def _caption_active_font(style: str, base_font, popped_font):
+    """Font for the focus line's active (spoken) word, per caption style.
+
+    ``swap`` keeps the 1.08x scale pop (``popped_font``). The multi-line styles
+    drop it (PM review 2026-07-12): on ``two-line``/``three-line`` the active
+    word renders at the base caption pt (``base_font``), accent-colored but not
+    enlarged, so the pop can no longer bleed into the adjacent words. Passing
+    ``base_font`` as the active font makes ``_caption_word_placements``
+    degenerate — ``active_adv == base_adv`` so ``draw_x == pen`` and the line
+    never shifts while the highlight advances.
+    """
+    return popped_font if style == "swap" else base_font
+
+
 def _font_for_cap_height(font_path, cap_px, image_font, ref: int = 200):
     """Return a Space Grotesk font sized so caps are about ``cap_px`` tall."""
     ref_font = image_font.truetype(str(font_path), ref)
@@ -1248,7 +1413,10 @@ def _caption_word_placements(block, caption_font, active_font, active_idx, cente
     for every ``active_idx``; the highlight never nudges its neighbours by even
     a pixel. The active word is drawn with ``active_font`` centered inside its
     base advance cell (``pen + (base_advance - active_advance) / 2``), so the
-    scale pop grows symmetrically about the word without shifting the line.
+    scale pop grows symmetrically about the word without shifting the line. When
+    ``active_font`` *is* the base caption font (the multi-line color-only
+    highlight — Amendment A) this degenerates: ``active_advance == base_advance``,
+    the centering term is zero, and ``draw_x == pen``.
     """
     space_w = caption_font.getlength(" ")
     base_advances = [caption_font.getlength(word["text"]) for word in block]
@@ -1273,8 +1441,10 @@ def _render_caption_tile(block, active_idx, caption_font, active_font, baseline_
 
     The whole phrase is drawn on one line, centered on ``center_x`` with its
     baseline at ``baseline_y``; every word is ivory except the active word,
-    which is its speaker's accent (HOST amber / GUEST magenta) at 1.08x pt,
-    baseline-aligned. Word positions come from ``_caption_word_placements`` (base
+    which is its speaker's accent (HOST amber / GUEST magenta) drawn in
+    ``active_font`` — 1.08x pt in the single-line ``swap`` style, the base
+    caption pt (color only, no scale pop) in the multi-line styles — baseline-
+    aligned. Word positions come from ``_caption_word_placements`` (base
     advances only) so static words never move as the highlight advances. The
     tile is tightly cropped to the ink bounding box plus a fixed 8 px margin;
     returns ``(tile, (paste_x, paste_y))`` so the caller pastes it onto the full
@@ -1318,6 +1488,59 @@ def _render_caption_tile(block, active_idx, caption_font, active_font, baseline_
             anchor="ls",
         )
     return tile, (off_x, off_y)
+
+
+def _render_context_tile(block, context_font, baseline_y, center_x):
+    """Render a context (catch-up / read-ahead) caption line as an RGBA tile.
+
+    The block's full text is drawn on one line, centered on ``center_x`` with its
+    baseline at ``baseline_y`` (the focus baseline — the tile is slot-independent
+    and the caller shifts it by ``slot * pitch`` at paste time), in a single
+    dimmed color: ivory pre-blended 45 % over the ink ground. There is no
+    active-word highlight and no accent hue — one tile per block. The tile is
+    tightly cropped to the ink bounding box plus the same fixed 8 px margin as
+    the focus tile; returns ``(tile, (paste_x, paste_y))``.
+    """
+    from PIL import Image, ImageDraw
+
+    text = " ".join(word["text"] for word in block)
+    fill = _blend(IVORY, INK, _CAPTION_CONTEXT_OPACITY)
+    draw_x = center_x - context_font.getlength(text) / 2
+    left, top, right, bottom = context_font.getbbox(text, anchor="ls")
+
+    off_x = math.floor(draw_x + left - _CAPTION_TILE_MARGIN_PX)
+    off_y = math.floor(baseline_y + top - _CAPTION_TILE_MARGIN_PX)
+    tile_w = max(1, math.ceil(draw_x + right + _CAPTION_TILE_MARGIN_PX) - off_x)
+    tile_h = max(1, math.ceil(baseline_y + bottom + _CAPTION_TILE_MARGIN_PX) - off_y)
+
+    tile = Image.new("RGBA", (tile_w, tile_h), (0, 0, 0, 0))
+    tdraw = ImageDraw.Draw(tile)
+    tdraw.text(
+        (draw_x - off_x, baseline_y - off_y),
+        text,
+        font=context_font,
+        fill=fill + (255,),
+        anchor="ls",
+    )
+    return tile, (off_x, off_y)
+
+
+def _paste_with_alpha(frame, tile, xy, alpha: float) -> None:
+    """Paste RGBA ``tile`` at ``xy`` onto ``frame``, scaling its alpha by ``alpha``.
+
+    At full ``alpha`` this is the plain ``frame.paste(tile, xy, tile)`` used for
+    every caption tile today (so the ``swap`` path stays byte-identical). Below
+    full it composites through a scaled copy of the tile's own alpha channel,
+    never mutating the cached tile, so a fading context line dissolves cleanly on
+    top of its dimmed color. Zero alpha is a no-op.
+    """
+    if alpha >= 1.0:
+        frame.paste(tile, xy, tile)
+        return
+    if alpha <= 0.0:
+        return
+    mask = tile.getchannel("A").point(lambda p: round(p * alpha))
+    frame.paste(tile, xy, mask)
 
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1659,7 @@ def build_promo(
     root: Path,
     words=None,
     fmt: str = "square",
+    style: str = "swap",
 ) -> None:
     """Render the promo video for ``audio_path`` to ``out_path``.
 
@@ -1445,7 +1669,10 @@ def build_promo(
     (trimmed) audio. When ``words`` (the full cached alignment) is given and
     the trim window contains at least one word, burned-in word-synced captions
     are composited beneath the cone; ``fmt`` selects ``square`` or ``vertical``
-    (9:16). Deterministic: same input + same alignment → same frames. Every
+    (9:16) and ``style`` the caption window: ``swap`` (single line, swap in
+    place — today's behavior), ``two-line`` (focus + dimmed read-ahead), or
+    ``three-line`` (dimmed catch-up + focus + dimmed read-ahead, scrolling
+    upward). Deterministic: same input + same alignment → same frames. Every
     user-facing failure raises an ``AgentFMError`` subclass.
     """
     samples = _decode_audio(audio_path, start, duration)
@@ -1460,8 +1687,9 @@ def build_promo(
     captions_on = words is not None
     caption_blocks: list = []
     caption_cues: list = []
-    caption_font = active_font = None
+    caption_font = active_font = context_font = None
     baseline_y = None
+    pitch = 0
     if captions_on:
         w0 = start or 0.0
         # The spec mandates w1 = w0 + duration when --duration is given. The
@@ -1487,23 +1715,30 @@ def build_promo(
             font_path = _promo_font_path(root)
             caption_pt = max(1, round(_CAPTION_PT_FRAC * size))
             active_pt = max(1, round(caption_pt * _CAPTION_ACTIVE_SCALE))
+            context_pt = max(1, round(caption_pt * _CAPTION_CONTEXT_SCALE))
             try:
                 caption_font = ImageFont.truetype(str(font_path), caption_pt)
-                active_font = ImageFont.truetype(str(font_path), active_pt)
+                popped_font = ImageFont.truetype(str(font_path), active_pt)
+                context_font = ImageFont.truetype(str(font_path), context_pt)
             except OSError as exc:
                 raise ConfigError(
                     f"promo font is unreadable or corrupt: {font_path} "
                     f"(SpaceGrotesk-Bold.ttf) ({exc})"
                 ) from exc
+            # Amendment A: swap keeps the 1.08x pop; the multi-line styles use
+            # the base font as the active font (color-only highlight, no pop).
+            active_font = _caption_active_font(style, caption_font, popped_font)
             max_width = _CAPTION_MAX_WIDTH_FRAC * size
             caption_blocks = build_blocks(
                 clipped, caption_font.getlength, max_width
             )
-            caption_cues = compute_cues(caption_blocks, window_secs)
-            if fmt == "vertical":
-                baseline_y = round(_VERTICAL_CAPTION_BASELINE * size / _VERTICAL_REF)
-            else:
-                baseline_y = round(_CAPTION_BASELINE_FRAC * size)
+            # Amendment B: the multi-line styles hold same-speaker captions
+            # through intra-turn pauses (bridge on speaker, not gap) and flush at
+            # every turn change; swap keeps today's gap-based bridging.
+            bridge = "speaker" if style in ("two-line", "three-line") else "gap"
+            caption_cues = compute_cues(caption_blocks, window_secs, bridge)
+            baseline_y = _caption_focus_baseline(size, fmt, style)
+            pitch = round(_CAPTION_LINE_PITCH_FRAC * size)
 
     base = _build_base_frame(size, title, root, captions_on=captions_on, fmt=fmt)
 
@@ -1532,7 +1767,8 @@ def build_promo(
         raise AudioError("ffmpeg not found — brew install ffmpeg")
 
     cache: dict[int, tuple] = {}
-    caption_cache: dict[int, tuple] = {}
+    focus_cache: dict[tuple, tuple] = {}
+    context_cache: dict[int, tuple] = {}
     cur_block = -1
     try:
         for i, e in enumerate(envelope):
@@ -1548,21 +1784,51 @@ def build_promo(
 
             if captions_on:
                 t = i / fps
-                bidx = _live_block(caption_cues, t)
-                if bidx is not None:
-                    if bidx != cur_block:
-                        caption_cache = {}  # bounded memory: current block only
-                        cur_block = bidx
-                    aidx = active_word_index(caption_blocks[bidx], t)
-                    ctile = caption_cache.get(aidx)
-                    if ctile is None:
-                        ctile = _render_caption_tile(
-                            caption_blocks[bidx], aidx, caption_font,
-                            active_font, baseline_y, center_x,
+                plans = plan_caption_lines(caption_blocks, caption_cues, style, t)
+                if plans:
+                    live = _live_block(caption_cues, t)
+                    if live != cur_block:
+                        # Bounded memory: focus variants only for the live block,
+                        # context tiles only for the {i-2, i-1, i, i+1} window.
+                        keep = {live - 2, live - 1, live, live + 1}
+                        focus_cache = {
+                            k: v for k, v in focus_cache.items() if k[0] == live
+                        }
+                        context_cache = {
+                            k: v for k, v in context_cache.items() if k in keep
+                        }
+                        cur_block = live
+                    # Paste order: context lines first, then the focus line on
+                    # top (they never overlap, but the focus stays last).
+                    for bidx, kind, slot, alpha in plans:
+                        if kind != "context":
+                            continue
+                        entry = context_cache.get(bidx)
+                        if entry is None:
+                            entry = _render_context_tile(
+                                caption_blocks[bidx], context_font, baseline_y, center_x
+                            )
+                            context_cache[bidx] = entry
+                        cimg, (cx, cy) = entry
+                        _paste_with_alpha(
+                            frame, cimg, (cx, cy + round(slot * pitch)), alpha
                         )
-                        caption_cache[aidx] = ctile
-                    cap_img, (cx, cy) = ctile
-                    frame.paste(cap_img, (cx, cy), cap_img)
+                    for bidx, kind, slot, alpha in plans:
+                        if kind != "focus":
+                            continue
+                        aidx = active_word_index(caption_blocks[bidx], t)
+                        key = (bidx, aidx)
+                        entry = focus_cache.get(key)
+                        if entry is None:
+                            entry = _render_caption_tile(
+                                caption_blocks[bidx], aidx, caption_font,
+                                active_font, baseline_y, center_x,
+                            )
+                            focus_cache[key] = entry
+                        fimg, (fx, fy) = entry
+                        _paste_with_alpha(
+                            frame, fimg, (fx, fy + round(slot * pitch)), alpha
+                        )
 
             proc.stdin.write(frame.tobytes())
     except BrokenPipeError:
@@ -1683,6 +1949,14 @@ def main(argv: list[str] | None = None) -> int:
         default="square",
         help="output format: square (default) or vertical 9:16",
     )
+    parser.add_argument(
+        "--caption-style",
+        choices=("swap", "two-line", "three-line"),
+        default="three-line",
+        help="caption window: swap (single line, swap in place), "
+        "two-line (focus + dimmed read-ahead below), three-line (default, "
+        "dimmed catch-up above + focus + dimmed read-ahead, scrolling upward)",
+    )
     args = parser.parse_args(argv)
 
     if args.align_only and not args.transcript:
@@ -1726,6 +2000,7 @@ def main(argv: list[str] | None = None) -> int:
             root,
             words=words,
             fmt=args.format,
+            style=args.caption_style,
         )
     except AgentFMError as exc:
         print(f"error: {exc}", file=sys.stderr)

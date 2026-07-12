@@ -18,11 +18,19 @@ uv run publish.py publish episodes/<ep-dir> --fake-tts   # deterministic tone in
 uv run publish.py publish episodes/<ep-dir> --no-upload  # build mp3 locally, skip R2 and feed
 uv run publish.py publish episodes/<ep-dir> --republish  # reuse existing mp3; retry upload + feed only
 uv run publish.py check-tts "some text"                  # real-TTS smoke test → check-tts.mp3
+
+uv run promo_video.py episodes/<ep>/episode.mp3 --transcript episodes/<ep>/script.json --align-only
+    # one-time per episode (sub-cent): fetch + cache word alignment to <audio-stem>.alignment.json
+uv run promo_video.py episodes/<ep>/episode.mp3 -o promo.mp4 --transcript episodes/<ep>/script.json \
+    --start 63 --duration 45 --title "How I built X" [--format vertical]
+    # captioned promo MP4 from a window of the episode; offline once alignment is cached
 ```
 
 `ffmpeg` must be on PATH (mp3 encoding). Real TTS/upload runs read secrets from `.env` (gitignored): `ELEVENLABS_API_KEY` or `GEMINI_API_KEY`, plus `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`.
 
 **TTS costs money.** Never re-synthesize to fix an upload failure — that's what `--republish` is for. Iterate on scripts with `--fake-tts`.
+
+`promo_video.py` is a standalone sibling CLI (not called by `publish.py` or the skill) that renders short promo MP4s with word-synced burned-in captions; `--caption-style swap|two-line|three-line` picks the caption window (default `three-line`). `--align-only` fetches word timings from the ElevenLabs Forced Alignment API once per episode (sub-cent) and caches them next to the audio; every later render reads that cache and is fully offline and free — **never re-synthesize TTS** to fix a promo/caption problem, since alignment and rendering never touch the TTS API. Real alignment calls read `ELEVENLABS_API_KEY` from `.env` like TTS does, and need `SSL_CERT_FILE` exported to the certifi bundle first (uv's Python ships without macOS system CAs): `export SSL_CERT_FILE="$(uv run python -c 'import certifi; print(certifi.where())')"`.
 
 ## Architecture
 
@@ -30,6 +38,7 @@ The system is deliberately split into a judgment half and a mechanical half:
 
 - **`skills/agent-fm/SKILL.md`** (+ `personas/{engg,sales,product}.md`) — all editorial judgment: trace mining, dossier writing, host-brief research, dialogue writing, conversational-quality rules. Runs as `/agent-fm <lens>` from inside any target project (symlinked to `~/.claude/skills/agent-fm`), writes episode artifacts into this repo's `episodes/`, then invokes `publish.py`.
 - **`publish.py`** — all mechanics, in one file: config/env loading, episode validation, chunking, TTS, WAV→MP3, R2 upload, manifest, RSS feed. Stdlib-first; only deps are `boto3` and `google-genai` (both imported lazily so `--fake-tts`/`--no-upload` runs stay light).
+- **`promo_video.py`** — standalone sibling CLI, not invoked by `publish.py` or the skill: turns an episode's audio + `script.json` into a captioned promo MP4 (audio-reactive brand-mark pulse, burned-in word-synced captions, optional vertical 9:16). Shares the `AgentFMError` contract with `publish.py` (imports the taxonomy from it) but its only network touch is the ElevenLabs Forced Alignment API, and only to build or refresh a missing word-timing cache — it never calls the TTS API.
 
 **To improve episode quality, edit the skill prompts (and `docs/transcript-quality-goal.md`, the scoring rubric) — never the Python.**
 
@@ -59,3 +68,4 @@ Fully offline. ElevenLabs tests monkeypatch the module-level `urllib.request.url
 - ElevenLabs voice IDs in config must be free-tier premade voices; paid library voices fail via API (commit 0d13dc2).
 - `SKILL.md` hardcodes `AGENTFM_ROOT` as an absolute path — it must be updated if the repo moves.
 - `artwork/backdrops/` (12 committed JPEGs) and `artwork/fonts/SpaceGrotesk-Bold.ttf` are runtime dependencies of every publish — deleting them breaks `make_cover` with a `ConfigError`; regenerate backdrops with `uv run artwork/make_backdrops.py`.
+- `promo_video.py`'s alignment cache (`<audio-stem>.alignment.json`) is validated on every load (audio/transcript hash, monotonic word times) and never silently re-fetched on a mismatch — pass `--refresh-alignment` to rebuild it. Real fetches need `SSL_CERT_FILE` exported to the certifi bundle first: `export SSL_CERT_FILE="$(uv run python -c 'import certifi; print(certifi.where())')"` — uv's Python has no macOS system CAs, so it otherwise fails with `CERTIFICATE_VERIFY_FAILED`.

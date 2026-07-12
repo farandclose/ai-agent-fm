@@ -721,9 +721,13 @@ def test_end_to_end_captioned_smoke(tmp_path, fmt):
 
     size = 160
     captioned = tmp_path / "promo.mp4"
+    # This test locates captions via the swap-style baseline (_VERTICAL_CAPTION_
+    # BASELINE), so it pins --caption-style swap explicitly now that the CLI
+    # default is three-line.
     rc = promo_video.main([
         str(wav), "-o", str(captioned), "--captions-json", str(cache),
         "--size", str(size), "--fps", "6", "--format", fmt, "--title", "Smoke",
+        "--caption-style", "swap",
     ])
     assert rc == 0
     assert captioned.exists() and captioned.stat().st_size > 1000
@@ -1082,3 +1086,431 @@ def test_odd_size_rejected_vertical(tmp_path):
             [str(audio), "-o", str(out), "--size", "65", "--format", "vertical"]
         )
     assert excinfo.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# Multi-line caption window planner (--caption-style two-line / three-line)
+#
+# The window/slide logic is a pure planner: (blocks, cues, style, t) -> a list
+# of (block_index, kind, slot, alpha) line plans, slots in pitch units. No
+# fonts, no Pillow, no ffmpeg — every case below is a direct unit test.
+# ---------------------------------------------------------------------------
+
+
+def _pb(*speakers):
+    """Blocks (one word each) from a sequence of HOST/GUEST speaker labels."""
+    return [[_w("w", sp)] for sp in speakers]
+
+
+def _plan_map(plans):
+    """Index a plan list by (block_index, kind) -> (slot, alpha)."""
+    return {(b, k): (slot, a) for b, k, slot, a in plans}
+
+
+def test_plan_swap_single_focus_at_all_live_times():
+    blocks = _pb("HOST", "HOST")
+    cues = [(0.0, 1.0), (1.0, 2.0)]
+    assert promo_video.plan_caption_lines(blocks, cues, "swap", 0.5) == [(0, "focus", 0, 1)]
+    assert promo_video.plan_caption_lines(blocks, cues, "swap", 1.5) == [(1, "focus", 0, 1)]
+    # No live block -> no plans.
+    assert promo_video.plan_caption_lines(blocks, cues, "swap", 9.0) == []
+
+
+def test_plan_three_line_steady_mid_turn():
+    blocks = _pb("HOST", "HOST", "HOST")
+    cues = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]  # contiguous (out == in)
+    # t is well past block 1's 0.25 s slide window -> steady state.
+    plans = promo_video.plan_caption_lines(blocks, cues, "three-line", 1.9)
+    assert plans == [(0, "context", -1, 1), (1, "focus", 0, 1), (2, "context", 1, 1)]
+
+
+def test_plan_speaker_boundary_flushes_next_and_prev():
+    blocks = _pb("HOST", "HOST", "GUEST", "GUEST")
+    cues = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)]
+    # Last block of the HOST turn: prev shown, no next (block 2 is GUEST).
+    last = promo_video.plan_caption_lines(blocks, cues, "three-line", 1.9)
+    assert last == [(0, "context", -1, 1), (1, "focus", 0, 1)]
+    # First block of the GUEST turn at its in-cue: no prev, no slide.
+    first = promo_video.plan_caption_lines(blocks, cues, "three-line", 2.0)
+    assert first == [(2, "focus", 0, 1), (3, "context", 1, 1)]
+
+
+def test_plan_post_silence_restart_and_dark_gap():
+    blocks = _pb("HOST", "HOST")
+    cues = [(0.0, 1.0), (2.0, 3.0)]  # genuine silence: not contiguous
+    # During the dark gap the planner returns nothing.
+    assert promo_video.plan_caption_lines(blocks, cues, "three-line", 1.5) == []
+    # Restart: no prev (bridge not taken), no slide, no next (no block 2).
+    assert promo_video.plan_caption_lines(blocks, cues, "three-line", 2.0) == [(1, "focus", 0, 1)]
+
+
+def test_plan_three_line_slide_math_and_settle():
+    blocks = _pb("HOST", "HOST", "HOST", "HOST")
+    cues = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)]
+    t0, dur = 2.0, 0.25  # slide on block i = 2 (i-1, i-2, i+1 all present)
+    e = 1.0 - (1.0 - 0.5) ** 3
+    rise = 1.0 - e
+    mid = _plan_map(promo_video.plan_caption_lines(blocks, cues, "three-line", t0 + dur / 2))
+    assert mid[(2, "focus")] == pytest.approx((rise, 1.0))          # new focus rises 0 + (1-e)
+    assert mid[(1, "context")] == pytest.approx((-1 + rise, 1.0))   # old focus -> catch-up
+    assert mid[(0, "context")] == pytest.approx((-2 + rise, rise))  # old prev leaves fading
+    assert mid[(3, "context")] == pytest.approx((1.0, e))           # new next fades in in place
+    # At t0 + dur the window has settled: steady slots, i-2 gone.
+    settled = _plan_map(promo_video.plan_caption_lines(blocks, cues, "three-line", t0 + dur))
+    assert settled[(2, "focus")] == (0, 1)
+    assert settled[(1, "context")] == (-1, 1)
+    assert settled[(3, "context")] == (1, 1)
+    assert (0, "context") not in settled
+
+
+def test_plan_slide_dur_clamps_to_short_cue_span():
+    blocks = _pb("HOST", "HOST", "HOST")
+    # Block 1's cue span is only 0.1 s, shorter than the nominal 0.25 s slide,
+    # so dur clamps to 0.1 and u reaches 0.5 at t0 + 0.05 (not t0 + 0.125).
+    cues = [(0.0, 1.0), (1.0, 1.1), (1.1, 2.0)]
+    rise_half = (1.0 - 0.5) ** 3  # 1 - e(0.5) = 0.125
+    mid = _plan_map(promo_video.plan_caption_lines(blocks, cues, "three-line", 1.05))
+    assert mid[(1, "focus")] == pytest.approx((rise_half, 1.0))
+    assert mid[(1, "focus")][0] == pytest.approx(0.125)  # not the un-clamped 0.512
+
+
+def test_plan_two_line_never_prev_and_old_focus_slides_out():
+    blocks = _pb("HOST", "HOST", "HOST")
+    cues = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
+    # Steady: read-ahead only, never a catch-up (prev) line above the focus.
+    steady = promo_video.plan_caption_lines(blocks, cues, "two-line", 1.9)
+    assert steady == [(1, "focus", 0, 1), (2, "context", 1, 1)]
+    # Sliding: the old focus (block 0) slides up while fading out; still no prev.
+    e = 1.0 - (1.0 - 0.5) ** 3
+    rise = 1.0 - e
+    mid = _plan_map(promo_video.plan_caption_lines(blocks, cues, "two-line", 1.125))
+    assert mid[(1, "focus")] == pytest.approx((rise, 1.0))
+    assert mid[(0, "context")] == pytest.approx((-1 + rise, rise))  # fades out, alpha < 1
+    assert (0, "context") in mid and len(mid) == 3  # old-focus, new-focus, new-next only
+
+
+def test_caption_focus_baseline_per_style_and_scale():
+    # Vertical focus baselines at S = 1080, per style.
+    assert promo_video._caption_focus_baseline(1080, "vertical", "swap") == 1160
+    assert promo_video._caption_focus_baseline(1080, "vertical", "two-line") == 1120
+    assert promo_video._caption_focus_baseline(1080, "vertical", "three-line") == 1104
+    # Scales by S / 1080.
+    assert promo_video._caption_focus_baseline(540, "vertical", "three-line") == round(
+        1104 * 540 / 1080
+    )
+    # Square is 0.76 S for every style.
+    assert promo_video._caption_focus_baseline(1000, "square", "three-line") == 760
+
+
+# ---------------------------------------------------------------------------
+# Rev 2 amendments (PM review of the first three-line sample, 2026-07-12)
+#   A. two-line/three-line drop the 1.08x scale pop: the active word renders at
+#      the base caption pt (color-only highlight); swap keeps the pop.
+#   B. compute_cues gains a bridge mode: "gap" (default, today's <= 0.25 s rule)
+#      vs "speaker" (same-speaker neighbours always bridge; different-speaker
+#      neighbours never bridge, out = last word's end).
+# ---------------------------------------------------------------------------
+
+
+# --- Amendment A: color-only highlight for the multi-line styles ------------
+
+
+def test_active_font_swap_keeps_pop_multiline_drops_it():
+    caption_font, popped_font = _caption_fonts()
+    # swap keeps the 1.08x scale pop; two-line / three-line degenerate to the
+    # base caption font (no pop), leaving only the speaker accent color.
+    assert promo_video._caption_active_font("swap", caption_font, popped_font) is popped_font
+    assert promo_video._caption_active_font("two-line", caption_font, popped_font) is caption_font
+    assert promo_video._caption_active_font("three-line", caption_font, popped_font) is caption_font
+
+
+def test_non_swap_active_word_draw_x_equals_pen_no_shift():
+    caption_font, _ = _caption_fonts()
+    block = [_w(t, "HOST") for t in ("alpha", "throwaway", "gamma")]
+    center_x = 500.0
+    # Non-swap passes the base caption font as the active font (Amendment A), so
+    # _caption_word_placements degenerates: the active word's draw_x is exactly
+    # its pen position, identical to when it is a static (non-active) word — no
+    # centering shift bleeds into the neighbours.
+    base = promo_video._caption_word_placements(block, caption_font, caption_font, -1, center_x)
+    for i in range(len(block)):
+        variant = promo_video._caption_word_placements(block, caption_font, caption_font, i, center_x)
+        assert variant[i][2] == pytest.approx(base[i][2])  # draw_x == pen (no shift)
+        assert variant[i][1] is caption_font               # base pt, no scale pop
+        # Every static word also stays put across variants.
+        for j in range(len(block)):
+            if j != i:
+                assert variant[j][2] == pytest.approx(base[j][2])
+
+
+# --- Amendment B: compute_cues bridge modes ---------------------------------
+
+
+def test_cue_speaker_mode_bridges_same_speaker_across_big_gap():
+    # Same speaker; gap = (2.0 - 0.05) - 1.4 = 0.55 s > 0.25 s. Gap mode would
+    # NOT bridge, but speaker mode bridges same-speaker neighbours always.
+    a = [_w("a", "HOST", start=1.0, end=1.4)]
+    b = [_w("b", "HOST", start=2.0, end=2.4)]
+    (in_a, out_a), (in_b, out_b) = promo_video.compute_cues([a, b], 10.0, bridge="speaker")
+    early_next = 2.0 - promo_video._CUE_LEAD
+    assert out_a == pytest.approx(early_next)  # bridged to the next in-cue
+    assert in_b == pytest.approx(early_next)
+    assert out_a == in_b  # contiguous -> the planner slides
+    # The planner reads the contiguous cues as a same-speaker scroll: the
+    # catch-up line shows and the focus advances.
+    cues = [(in_a, out_a), (in_b, out_b)]
+    kinds = {(bi, k) for bi, k, _, _ in promo_video.plan_caption_lines([a, b], cues, "three-line", in_b + 0.001)}
+    assert (0, "context") in kinds  # catch-up line present
+    assert (1, "focus") in kinds
+
+
+def test_cue_speaker_mode_refuses_cross_speaker_small_gap():
+    # Different speakers; gap = (1.5 - 0.05) - 1.4 = 0.05 s <= 0.25 s. Gap mode
+    # WOULD bridge, but speaker mode never bridges across a speaker change.
+    a = [_w("a", "HOST", start=1.0, end=1.4)]
+    b = [_w("b", "GUEST", start=1.5, end=1.9)]
+    (in_a, out_a), (in_b, out_b) = promo_video.compute_cues([a, b], 10.0, bridge="speaker")
+    assert out_a == pytest.approx(1.4)   # out = the last word's own end
+    assert in_b == pytest.approx(1.45)   # next in-cue unchanged (early_next)
+    assert out_a < in_b                  # a blank beat between the turns
+
+
+def test_cue_gap_mode_is_default_and_ignores_speaker():
+    # The default matches explicit bridge="gap", byte-for-byte, and the gap rule
+    # bridges on gap size alone — the speaker change is irrelevant in gap mode.
+    a = [_w("a", "HOST", start=1.0, end=1.4)]
+    b = [_w("b", "GUEST", start=1.5, end=1.9)]  # different speaker, small gap
+    default = promo_video.compute_cues([a, b], 10.0)
+    gap = promo_video.compute_cues([a, b], 10.0, bridge="gap")
+    assert default == gap
+    (in_a, out_a), (in_b, out_b) = default
+    assert out_a == pytest.approx(1.45)  # small gap bridges despite the speaker change
+    assert in_b == pytest.approx(1.45)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end multi-line captioned smoke render (guarded on ffmpeg)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+@pytest.mark.parametrize("style", ["two-line", "three-line"])
+@pytest.mark.parametrize("fmt", ["square", "vertical"])
+def test_end_to_end_multiline_caption_smoke(tmp_path, style, fmt):
+    wav = tmp_path / "clip.wav"
+    _write_wav(wav)
+    audio_sha = hashlib.sha256(wav.read_bytes()).hexdigest()
+    cache = tmp_path / "clip.alignment.json"
+    # Two same-speaker blocks that bridge -> exercises context lines + a slide.
+    words = [
+        {"text": "Hello", "start": 0.0, "end": 0.15, "loss": 0.05, "speaker": "HOST"},
+        {"text": "there", "start": 0.15, "end": 0.3, "loss": 0.05, "speaker": "HOST"},
+        {"text": "friend.", "start": 0.3, "end": 0.45, "loss": 0.05, "speaker": "HOST"},
+        {"text": "How", "start": 0.45, "end": 0.6, "loss": 0.05, "speaker": "HOST"},
+        {"text": "are", "start": 0.6, "end": 0.75, "loss": 0.05, "speaker": "HOST"},
+        {"text": "you?", "start": 0.75, "end": 0.95, "loss": 0.05, "speaker": "HOST"},
+    ]
+    promo_video.write_alignment_cache(cache, audio_sha, "ignored", words)
+
+    out = tmp_path / "promo.mp4"
+    rc = promo_video.main([
+        str(wav), "-o", str(out), "--captions-json", str(cache),
+        "--size", "64", "--fps", "6", "--format", fmt, "--caption-style", style,
+    ])
+    assert rc == 0
+    assert out.exists() and out.stat().st_size > 1000
+
+
+# ---------------------------------------------------------------------------
+# CLI default + swap legacy-path regression (adversarial-review coverage gap)
+#
+# Two contracts the rest of the suite left unpinned:
+#   (a) the CLI's --caption-style default is "three-line"; and
+#   (b) build_promo(style="swap") still takes *exactly* the pre-multiline
+#       legacy path — gap-bridged cues, the 1.08x popped active font, the
+#       single-line focus-tile renderer only, and never any context/window
+#       (multiline) code.
+# The pre-feature renderer is gone, so (b) is pinned by spying on the module
+# seams rather than diffing a binary golden (ffmpeg/PIL vary per host, so a
+# byte/hash comparison would be flaky). Every case is fully offline: the CLI
+# test stubs build_promo; the render tests use the existing _fake_subprocess.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "extra_argv, expected_style",
+    [
+        ([], "three-line"),                          # no --caption-style: the CLI default
+        (["--caption-style", "swap"], "swap"),
+        (["--caption-style", "two-line"], "two-line"),
+        (["--caption-style", "three-line"], "three-line"),
+    ],
+)
+def test_cli_caption_style_default_and_passthrough(tmp_path, monkeypatch, extra_argv, expected_style):
+    # main() must hand build_promo the resolved caption style; with no
+    # --caption-style on argv that resolved value is "three-line". build_promo
+    # is stubbed to capture the kwarg so nothing renders (no ffmpeg, no PIL).
+    audio = tmp_path / "clip.mp3"
+    audio.write_bytes(b"AUDIOBYTES")
+    out = tmp_path / "out.mp4"
+    captured = {}
+
+    def fake_build_promo(*args, **kwargs):
+        captured["style"] = kwargs.get("style")
+
+    monkeypatch.setattr(promo_video, "build_promo", fake_build_promo)
+    # No --transcript and no cache file -> resolve_caption_words returns None
+    # (captions off), so main() never needs the network or an API key.
+    rc = promo_video.main([str(audio), "-o", str(out), *extra_argv])
+    assert rc == 0
+    assert captured["style"] == expected_style
+
+
+def _same_speaker_caption_words():
+    """Six HOST words → two same-speaker blocks.
+
+    Same-speaker adjacency is what makes the multiline styles show context
+    (catch-up / read-ahead) lines and scroll, so this one fixture exercises the
+    full divergence between the swap and three-line render paths.
+    """
+    return [
+        {"text": "Hello", "start": 0.0, "end": 0.15, "loss": 0.05, "speaker": "HOST"},
+        {"text": "there", "start": 0.15, "end": 0.3, "loss": 0.05, "speaker": "HOST"},
+        {"text": "friend.", "start": 0.3, "end": 0.45, "loss": 0.05, "speaker": "HOST"},
+        {"text": "How", "start": 0.45, "end": 0.6, "loss": 0.05, "speaker": "HOST"},
+        {"text": "are", "start": 0.6, "end": 0.75, "loss": 0.05, "speaker": "HOST"},
+        {"text": "you?", "start": 0.75, "end": 0.95, "loss": 0.05, "speaker": "HOST"},
+    ]
+
+
+def test_swap_render_takes_legacy_path_only(tmp_path, monkeypatch):
+    # Offline render (ffmpeg faked) that pins the swap path to the legacy
+    # pipeline by spying on the module seams: the cue bridge selection, the
+    # planner output, the focus-tile renderer + the font it draws with, and the
+    # context-tile renderer (which must never fire).
+    captured = {}
+    _fake_subprocess(monkeypatch, captured)
+
+    bridges = []
+    orig_cues = promo_video.compute_cues
+
+    def cues_spy(blocks, window_end, bridge="gap"):
+        bridges.append(bridge)
+        return orig_cues(blocks, window_end, bridge)
+
+    monkeypatch.setattr(promo_video, "compute_cues", cues_spy)
+
+    plan_rows = []
+    orig_plan = promo_video.plan_caption_lines
+
+    def plan_spy(blocks, cues, style, t):
+        plans = orig_plan(blocks, cues, style, t)
+        plan_rows.append((style, plans))
+        return plans
+
+    monkeypatch.setattr(promo_video, "plan_caption_lines", plan_spy)
+
+    focus = {"caption_font": None, "active_fonts": []}
+    orig_focus = promo_video._render_caption_tile
+
+    def focus_spy(block, active_idx, caption_font, active_font, baseline_y, center_x):
+        focus["caption_font"] = caption_font
+        focus["active_fonts"].append(active_font)
+        return orig_focus(block, active_idx, caption_font, active_font, baseline_y, center_x)
+
+    monkeypatch.setattr(promo_video, "_render_caption_tile", focus_spy)
+
+    def context_boom(*a, **k):
+        raise AssertionError("swap must never render a context/window tile")
+
+    monkeypatch.setattr(promo_video, "_render_context_tile", context_boom)
+
+    audio = tmp_path / "in.mp3"
+    audio.write_bytes(b"")
+    out = tmp_path / "out.mp4"
+    # size 160 -> caption pt 10, popped pt 11: the 1.08x pop is genuinely larger.
+    promo_video.build_promo(
+        audio, out, size=160, fps=10, start=None, duration=None,
+        title=None, root=REPO_ROOT, words=_same_speaker_caption_words(),
+        fmt="square", style="swap",
+    )
+
+    # Cues were built in the legacy gap-bridge mode (never the speaker mode).
+    assert bridges == ["gap"]
+    # The legacy single-line focus tile ran (context_boom guarantees the
+    # context renderer never did).
+    assert focus["active_fonts"], "swap render produced no focus tiles"
+    # The active (spoken) word draws with the 1.08x popped font — a distinct,
+    # strictly larger font than the base caption font.
+    base = focus["caption_font"]
+    expected_active_pt = max(1, round(base.size * promo_video._CAPTION_ACTIVE_SCALE))
+    for af in focus["active_fonts"]:
+        assert af is not base
+        assert af.size == expected_active_pt
+        assert af.size > base.size  # the pop is real at this size
+    # The planner only ever saw "swap" and only ever emitted a single focus line
+    # at slot 0 (no catch-up/read-ahead, no fractional slide slot, full alpha).
+    assert {style for style, _ in plan_rows} == {"swap"}
+    for _, plans in plan_rows:
+        assert len(plans) <= 1
+        for bidx, kind, slot, alpha in plans:
+            assert kind == "focus"
+            assert slot == 0.0
+            assert alpha == 1.0
+
+
+def test_multiline_render_diverges_from_legacy_swap_path(tmp_path, monkeypatch):
+    # The mirror of the swap test on the identical fixture: three-line must take
+    # the *new* path, proving the swap assertions above are discriminating (not
+    # vacuously true for every style). Bridges on speaker, renders context
+    # tiles, and drops the pop (active word draws at the base caption font).
+    captured = {}
+    _fake_subprocess(monkeypatch, captured)
+
+    bridges = []
+    orig_cues = promo_video.compute_cues
+
+    def cues_spy(blocks, window_end, bridge="gap"):
+        bridges.append(bridge)
+        return orig_cues(blocks, window_end, bridge)
+
+    monkeypatch.setattr(promo_video, "compute_cues", cues_spy)
+
+    context = {"n": 0}
+    orig_context = promo_video._render_context_tile
+
+    def context_spy(*a, **k):
+        context["n"] += 1
+        return orig_context(*a, **k)
+
+    monkeypatch.setattr(promo_video, "_render_context_tile", context_spy)
+
+    focus = {"caption_font": None, "active_fonts": []}
+    orig_focus = promo_video._render_caption_tile
+
+    def focus_spy(block, active_idx, caption_font, active_font, baseline_y, center_x):
+        focus["caption_font"] = caption_font
+        focus["active_fonts"].append(active_font)
+        return orig_focus(block, active_idx, caption_font, active_font, baseline_y, center_x)
+
+    monkeypatch.setattr(promo_video, "_render_caption_tile", focus_spy)
+
+    audio = tmp_path / "in.mp3"
+    audio.write_bytes(b"")
+    out = tmp_path / "out.mp4"
+    promo_video.build_promo(
+        audio, out, size=160, fps=10, start=None, duration=None,
+        title=None, root=REPO_ROOT, words=_same_speaker_caption_words(),
+        fmt="square", style="three-line",
+    )
+
+    # three-line bridges same-speaker neighbours on speaker (not gap)...
+    assert bridges == ["speaker"]
+    # ...renders the dimmed context (catch-up / read-ahead) tiles swap never does...
+    assert context["n"] > 0
+    # ...and drops the pop: the active word draws with the *base* caption font.
+    base = focus["caption_font"]
+    assert focus["active_fonts"], "three-line render produced no focus tiles"
+    for af in focus["active_fonts"]:
+        assert af is base
+        assert af.size == base.size
