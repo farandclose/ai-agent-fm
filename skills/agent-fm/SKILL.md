@@ -1,6 +1,6 @@
 ---
 name: agent-fm
-description: Use when the user wants a podcast episode about the current project (/agent-fm engg|sales|product) — mines Claude Code session traces + code into a host/guest dialogue and publishes it to the private AI Agent FM feed.
+description: Use when the user wants a podcast episode about the current project (/agent-fm engg|sales|product) — mines Claude Code session traces + code into a host/guest dialogue and publishes it to the private AI Agent FM feed — or when they want to cut a short promo video from an already-published episode ("cut a promo for <episode>").
 ---
 
 # AI Agent FM — Episode Generator
@@ -25,9 +25,12 @@ Compute it once at the start and substitute the real value wherever
 
 ## Arguments
 
-`/agent-fm <lens>` where lens ∈ `engg | sales | product`. If the lens is
-missing or invalid, ask the user to pick one (describe each in one line) and
-stop until answered. The lens file `personas/<lens>.md` (in this skill's
+`/agent-fm <lens>` where lens ∈ `engg | sales | product`. Exception: `promo` as the
+first argument (`/agent-fm promo <episode-dir>`), or a natural-language promo
+request ("cut a promo for <episode>") — either is not a lens; skip lens
+validation and Steps 1–7 and jump to `## Promo cut (on-demand)`.
+Otherwise, if the lens is missing or invalid, ask the user to pick one
+(describe each in one line) and stop until answered. The lens file `personas/<lens>.md` (in this skill's
 directory) is the HOST's questioning agenda — the guest is always the
 builder, regardless of lens.
 
@@ -409,3 +412,92 @@ episode title. On failure, show the error and suggest the matching fix
 (`.env` secrets, R2 setup, or `--republish` for upload-only retries). Do NOT
 retry by regenerating audio; `--republish` exists so a network blip never
 costs another TTS run.
+
+## Promo cut (on-demand)
+
+A separate entry point, not Step 8. It runs on its own — none of Steps 1–7 —
+against an episode that already exists in `AGENTFM_ROOT/episodes/`. The user
+asks for it; never trigger it automatically on publish.
+
+**Trigger.** The user asks for a promo for an episode — "cut a promo for
+<episode>", "/agent-fm promo <episode-dir>", or equivalent. If the episode is
+ambiguous or unnamed, list the directories under `AGENTFM_ROOT/episodes/` that
+contain both `episode.mp3` and `script.json`, ask the user to pick, and stop
+until answered.
+
+### Stage 1 — Clip selection (the editorial judgment)
+
+1. Read `AGENTFM_ROOT/episodes/<ep>/script.json` and pick the strongest
+   self-contained **20–35 second** exchange. Selection criteria, in priority
+   order:
+   - **Hook question + payoff answer** — a HOST question a stranger would want
+     answered, and the GUEST turn that lands it.
+   - Self-contained: no unresolved "that/it/as I said" pointing outside the
+     clip; a first-time viewer needs zero prior context.
+   - Concrete and surprising over generic — a specific number, failure, or
+     reversal beats a summary statement.
+   - **Whole turns only — never cut mid-turn.**
+2. Compute exact timings from
+   `AGENTFM_ROOT/episodes/<ep>/episode.alignment.json`. The word list covers
+   the full episode in order, so locate the chosen turns' words by walking it
+   in order (speaker runs mark the turn boundaries). Set `--start` = first
+   word's `start` minus 0.2–0.3 s (clamp at 0), end = last word's `end` plus
+   0.2–0.3 s, `--duration` = end − start. Round to 0.1 s. Target 20–35 s; if
+   the best exchange falls outside that window, propose the closest cut and say
+   so explicitly — never silently stretch or trim.
+3. If `episode.alignment.json` does not exist yet, still select the clip from
+   `script.json` alone, but flag in the proposal that timings are pending
+   alignment and will be computed before rendering.
+4. Draft a `--title` line: one short overlay line (≤ ~40 chars), sentence case,
+   cut-specific — the hook of THIS clip, not the episode title restated
+   (shape: "How this podcast builds itself").
+
+### Stage 2 — Proposal gate (hard stop)
+
+Before ANY rendering or alignment call, present to the user:
+
+- The chosen exchange verbatim, speaker-labeled.
+- One sentence on why this clip — what the hook is and what the payoff is.
+- `--start` / `--duration` (or "pending alignment — computed next").
+- The proposed `--title` line.
+- Cost note: zero only if the alignment cache exists AND is valid; one sub-cent
+  Forced Alignment call if it must be built (missing) or rebuilt (stale — see
+  Stage 3 step 4). Never promise "zero cost" on file existence alone.
+
+Offer: approve / pick a different moment / adjust the title. Do NOT proceed
+until the user approves. If they redirect, return to Stage 1 with their steer.
+
+### Stage 3 — Render (mechanics, on approval only)
+
+1. If `AGENTFM_ROOT/episodes/<ep>/episode.alignment.json` is missing, build it
+   first — one-time, sub-cent; needs `ELEVENLABS_API_KEY` in
+   `AGENTFM_ROOT/.env`:
+   ```bash
+   export SSL_CERT_FILE="$(uv run --project AGENTFM_ROOT python -c 'import certifi; print(certifi.where())' 2>/dev/null | tail -1)"
+   uv run --project AGENTFM_ROOT AGENTFM_ROOT/promo_video.py \
+       AGENTFM_ROOT/episodes/<ep>/episode.mp3 \
+       --transcript AGENTFM_ROOT/episodes/<ep>/script.json --align-only
+   ```
+   (`SSL_CERT_FILE` is required — uv's Python has no macOS system CAs.) Then
+   recompute Stage 1's timings if they were pending.
+2. Render both masters, offline, with the default caption style (never pass
+   `--caption-style`):
+   ```bash
+   uv run --project AGENTFM_ROOT AGENTFM_ROOT/promo_video.py \
+       AGENTFM_ROOT/episodes/<ep>/episode.mp3 \
+       --transcript AGENTFM_ROOT/episodes/<ep>/script.json \
+       --start <start> --duration <duration> --title "<title>" \
+       -o AGENTFM_ROOT/episodes/<ep>/promo-square.mp4
+   # same command again with: --format vertical -o AGENTFM_ROOT/episodes/<ep>/promo-vertical.mp4
+   ```
+3. Report both output paths and the final clip bounds. Outputs are local and
+   gitignored (all of `episodes/` is); nothing is uploaded anywhere.
+4. On any error, show it and suggest the matching fix (missing alignment →
+   step 1; missing `.env` key → add it to `AGENTFM_ROOT/.env`). Stale cache is
+   special: `promo_video.py` validates the cache on every load (audio/transcript
+   hash, monotonic word times) and errors on mismatch rather than silently
+   re-fetching. Rebuilding it (`--refresh-alignment`) is a paid sub-cent call
+   that was NOT in the approved proposal — stop, disclose the cost, get
+   approval, refresh, recompute the Stage 1 timings from the fresh cache, and
+   re-present the final bounds before rendering. **Never re-synthesize TTS** —
+   no promo or caption problem ever requires it.
