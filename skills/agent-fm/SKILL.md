@@ -165,7 +165,19 @@ budget, and these rules — never the host brief or the objective:
   not know things. You may think out loud and change your mind mid-answer.
 - Labeled speculation only, at most 2–3 times: "if I had to bet…", reasoning
   from a named dossier fact.
-- Never pitch. You're not selling; you're remembering.
+- When asked what the product is, orient — don't sell. Start from the
+  user's situation and the concrete consequence when it goes wrong, then
+  what the product changes, then only the mechanics needed to make that
+  tangible. No feature inventories, no undefined product nouns, no
+  tagline in place of an explanation, and no market or urgency claims
+  the dossier doesn't record — if the dossier only records your own
+  situation, describe that honestly instead of inventing customer
+  demand. Your first answer doesn't need to be a complete rehearsed
+  pitch; the host will follow up, and the picture can build over two
+  short exchanges.
+- Never pitch — no selling, exaggeration, or polished marketing
+  performance. That bans the performance, not the clarity: explaining
+  plainly what the product does for its user is answering the question.
 
 **HOST agent** receives: the full text of `host-brief.md`, `objective.md`,
 the lens file, the target word budget, and these rules — never the dossier:
@@ -185,11 +197,14 @@ the lens file, the target word budget, and these rules — never the dossier:
   inside-story fact you have not heard from the guest. If you infer, label
   it as a hypothesis ("I wondered whether…", "was that more of a pivot
   than an abandonment?"). Never heighten duration, motive, consequence,
-  or finality for drama. Establish the show, the guest, what the product
-  actually does in one plain mechanical sentence (what it watches, what
-  it says back), and why anyone should care within your first ~4 turns;
-  the mission alone doesn't count. The stakes are best elicited in the
-  guest's own words ("give me the version you'd tell an engineer in the
+  or finality for drama. Within your first ~4 turns, establish the show,
+  the guest, and a problem-and-solution model the listener can hold: ask
+  first about the situation the product's user is in and what goes wrong
+  there, then follow naturally with what the product changes and how it
+  works in concrete terms — this may span two short exchanges. The
+  mission alone doesn't count, and neither does a feature inventory. Why
+  anyone should care — the stakes — is best elicited in the guest's own
+  words ("give me the version you'd tell an engineer in the
   elevator"). Introduce the guest honestly, once, as "the builder —
   reconstructed from the session traces", then play it straight. Never
   lean on a product noun (a feature name like "the coach") the listener
@@ -271,7 +286,10 @@ earlier;
 split turns over ~60 words by inserting the other speaker's backchannel;
 insert connective air where the ear needs it (signposts, a one-line host
 paraphrase, "okay, so—"); verify orientation debt is repaid (the billboard
-within the first ~4 exchanges covers show, guest, and product mechanics;
+within the first ~4 exchanges — counted after the tape opener when one is
+used — covers show, guest, and a problem-and-solution model: who the
+product's user is, what goes wrong for them, what the product changes,
+and how, concretely;
 every recurring product noun is defined at or before first use — if the
 tape doesn't do it, a one-line host clarifying beat counts as connective
 air, not polish); enforce spoken-word surface (contractions, no
@@ -330,7 +348,10 @@ is how tape dies.
 
 1. Retell the episode in five sentences: who is speaking, what they
    built, what happened, what's unresolved.
-2. State in one sentence what the product actually does, mechanically.
+2. State, in a sentence or two each: who the product's user is (the
+   situation they're in), what goes wrong for them without it, what the
+   product changes, and how it does that concretely. Flag any of the
+   four it cannot answer from the transcript alone.
 3. Flag every turn where it had to guess — an undefined term, a reference
    to something never explained, a leap it couldn't follow.
 4. List threads that felt dropped by mistake (vs. deliberately left open).
@@ -343,13 +364,18 @@ the paths to
 `AGENTFM_ROOT/docs/transcript-quality-goal.md` and
 `AGENTFM_ROOT/docs/podcast-principles.md`. Ask it to:
 
-1. Check every hard constraint in the rubric — especially two-source
+1. Check every hard constraint in the rubric — especially source
    grounding: every GUEST claim about events/decisions/numbers traced to
    the dossier, every feeling to `The person`, every HOST outside-world
    claim to the host brief, and every HOST inside-story assertion either
    previously disclosed by the GUEST or explicitly framed as a question
    or hypothesis. Quote each violation.
-2. Verify the declared opening mode. In tape mode, confirm the opener is
+2. Classify the opening mode independently BEFORE reading the
+   declaration in `review.md`: compare the opening turns against
+   `interview-raw.json` yourself, then check the declaration against
+   your finding — a mismatch (verbatim tape declared fallback, rewritten
+   tape declared verbatim, or no declaration when raw tape exists) is
+   itself a violation to flag. In tape mode, confirm the opener is
    one contiguous verbatim GUEST turn or HOST→GUEST exchange in
    `interview-raw.json`, and flag rewriting, stitching, missing context,
    duplication, or a spent reveal. In fallback mode, confirm the opening

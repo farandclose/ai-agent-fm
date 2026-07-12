@@ -1,5 +1,8 @@
 # Listener-first product orientation
 
+**Status: implemented 2026-07-12** (SKILL.md, podcast-principles.md,
+transcript-quality-goal.md).
+
 ## Problem
 
 The current episode guidance asks the host to establish what a product

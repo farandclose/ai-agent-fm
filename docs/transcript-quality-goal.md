@@ -76,10 +76,11 @@ mechanically.
   host-brief fact, and at least one speaker audibly updates their view: 6
 
 **6. Speech realism & air — 15 pts** (principles #14)
-- The texture is spoken, not written: long additive sentences chained
-  with and/so/because, hedges ("I think", "sort of", "probably"), natural
-  word repetition — no staccato fragments, echo repetition, or placed
-  ellipses as drama, no elegant variation or essay metaphors: 6
+- No written-prose tells: no staccato fragments, echo repetition, or
+  placed ellipses as drama; no elegant variation or essay metaphors.
+  (Real spoken texture — long additive sentences, hedges, natural word
+  repetition — is what remains when the tells are gone; per the one-way
+  rule below, its presence is never scored, only the tells' absence.): 6
 - Past tense is the default for past events; the historical present
   appears at most inside one vivid scene and is never date-stamped: 3
 - Signposts at natural boundaries and at least one host paraphrase in
@@ -89,6 +90,16 @@ mechanically.
 - Direct address to the listener at most once or twice, where it earns
   intimacy: 2
 
+**The one-way rule (governs every lint and texture criterion):** a
+mechanical lint may only forbid a surface form, never require the
+presence of one. A judged item may reward the function a line performs
+(a paraphrase for the ear, an unfinished thought left standing) but
+never the frequency or placement of a spontaneity marker (hedges,
+fillers, stumbles, hesitations). Rewarding a marker's presence
+manufactures that marker — the Goodhart failure this rubric exists to
+prevent. Any future lint or criterion that violates this rule is invalid
+as written.
+
 **Punchline lint (mechanical, applied before scoring):** in every window of
 10 consecutive exchanges, at most 5 may end neatly resolved (an aphorism,
 a zinger, a wrapped bow). Each violating window: −5 from the total. This
@@ -96,9 +107,14 @@ is the anti-aphorism guard — quotable lines are allowed to exist, but only
 against a plainer surround.
 
 **Opener-integrity lint (mechanical + judged, applied before scoring):**
-when `interview-raw.json` exists and the episode declares tape mode, the
-opening must be exactly one contiguous verbatim GUEST turn or HOST→GUEST
-exchange from the raw turns, with its indices recorded in `review.md`.
+the reviewer first classifies the opening independently — compare the
+opening turns against the raw tape BEFORE reading the declaration in
+`review.md` — then checks the declaration against that finding; a
+mismatch (an opening that is verbatim tape but declared fallback, or
+rewritten tape declared verbatim, or no declaration at all when raw tape
+exists) is itself an integrity violation. In tape mode, the opening must
+be exactly one contiguous verbatim GUEST turn or HOST→GUEST exchange
+from the raw turns, with its indices recorded in `review.md`.
 No rewriting, stitching, montage, undefined dependency, ungrounded
 premise, duplicate left without a continuity reason, or excerpt that
 spends the answer, principal peak, or protected ending. In fallback mode,
@@ -107,14 +123,18 @@ states why no raw moment qualified. If raw tape is unavailable, do not
 claim tape provenance; assess the opening as a direct opening. Any
 provenance or integrity violation rejects the revision (principles #9).
 
-**Orientation lint (mechanical, applied before scoring):** by the end of
-the first 4 exchanges, including any tape opener, the show, the guest,
-what the product actually does (mechanics — what it watches, what it says
-back — not just the mission), AND why anyone should care (the stakes, in
-the builder's own words) must all have been stated; and every recurring
-product noun (feature names like "the coach") must be defined at or before
-its first use. Each violation: −5 from the total. An opener may borrow
-context; the billboard must repay it in full (principles #9).
+**Orientation lint (mechanical + judged, applied before scoring):** by
+the end of the first 4 exchanges — counted after the tape opener when one
+is used (the opener borrows context; the window is for repaying it) — the
+listener must be able to assemble a coherent problem-and-solution model:
+the show, the guest, who the product's user is and what goes wrong for
+them without it, what the product changes, and how it does that in
+concrete terms (not just the mission, and not a feature inventory), AND
+why anyone should care — the stakes, best in the builder's own words.
+Every recurring product noun (feature names like "the coach") must be
+defined at or before its first use. Each violation: −5 from the total.
+An opener may borrow context; the billboard must repay it in full
+(principles #9).
 
 **Calendar-date lint (mechanical):** no spoken day-precision date ("June
 27th", "on July 3rd"). Time is anchored relative to now ("a couple of
@@ -145,6 +165,24 @@ on-mic — "segment", "rapid-fire", "as promised", "hold that thought",
 "that's my next…", "listeners need to know". Callbacks return to their
 thread unannounced; at most one soft, human deferral per episode ("I want
 to come back to that"). Each violation: −5. (Principles #13.)
+
+**Lint provenance (every lint records the real failure it came from):**
+punchline — the aphorism-string episodes (2026-07-07); opener-integrity
+— the manufactured cold-open premises in
+`human-harness-2026-07-08-product`; orientation — a billboard that named
+the mission but left the problem, mechanics, and feature nouns undefined;
+calendar-date, number-precision, host-turn, drama-lexicon, and
+structure-narration — the drama-moved-house builder review of
+`human-harness-2026-07-07-product-2`. A lint proposed without a real
+observed failure behind it doesn't get added.
+
+**Lint audit (standing rule):** when builder review of a new episode
+finds a quality failure, ask two questions before adding a lint: did the
+drama move house again (and which existing lint *should* have caught
+it), and did any existing lint manufacture a new tic (markers appearing
+on schedule, evenly spaced, or at rule-shaped frequencies)? Removing or
+narrowing a lint that causes tics is as legitimate an outcome of review
+as adding one.
 
 ## Hard constraints (any violation = reject the revision, score is void)
 
@@ -193,7 +231,7 @@ to come back to that"). Each violation: −5. (Principles #13.)
    calendar-date, number-precision, host-turn, drama-lexicon,
    structure-narration — and the turn-cap check (a small throwaway script
    over the JSON; do not eyeball).
-3. Judge items 1–5 against the rubric, quoting the evidence turns per line.
+3. Judge items 1–6 against the rubric, quoting the evidence turns per line.
 4. Revise ONLY the lowest-scoring items, subtractively (cut, restore tape,
    reorder, add air). Preserve what already scores well.
 5. Repeat. Stop when: score ≥ 85 with all hard constraints green, OR two
@@ -245,3 +283,23 @@ a short contiguous verbatim raw-tape excerpt with recorded provenance; if
 none qualifies, an honest billboard and grounded question is the correct
 fallback. The new opener-integrity lint protects factuality, context, and
 later reveals without introducing a new speaker or production layer.
+
+## Why revised again (2026-07-12)
+
+Two fixes from review of the 2026-07-08/07-11 revisions, before either
+failure occurred on tape. First, rubric item 6 rewarded the *presence*
+of hedges and word repetition — the same Goodhart mechanism as the old
+"exactly one self-correction" rule, which would eventually manufacture
+hedge tics. Texture is now scored only by the absence of written-prose
+tells, and the one-way rule makes that a standing constraint on all
+future lints. Second, the opener-integrity checks branched on the mode
+the editor *declared*, so a misdeclared or undeclared mode got weaker
+checks; the reviewer now classifies the opening independently and treats
+a mismatch as a violation. Same pass: the orientation lint was upgraded
+from "one plain mechanical sentence" to a problem-and-solution model
+(situation → consequence → change → mechanics), per
+`docs/specs/2026-07-11-listener-first-product-orientation-design.md` —
+mechanics-first orientation passed the lint while cold listeners still
+assembled the product from feature names — and the ~4-exchange window
+was pinned to start after the tape opener, which had silently tightened
+when tape openers were introduced.

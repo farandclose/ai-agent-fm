@@ -147,20 +147,27 @@ inside-story fact, converts a pivot into an abandonment, or states an
 unseen premise as fact just to provoke a correction. A guess must sound
 like a guess.
 
-In either mode, the billboard repays any borrowed context within the first
-~4 exchanges: the listener has the show, who's speaking, what the product
-actually does — one plain mechanical sentence (what it watches, what it
-says back), not just the mission — and why anyone should care, best in the
-builder's own words ("give me the version you'd tell an engineer in the
-elevator").
+In either mode, the billboard repays any borrowed context within the
+first ~4 exchanges — counted after the tape opener when one is used: the
+opener is the borrowing, the window is the repayment. By then the
+listener can assemble a **problem-and-solution model**: the show, who's
+speaking, who the product's user is and what goes wrong for them without
+it, what the product changes about that, and how it does so in concrete
+terms — not just the mission, and not a feature inventory — plus why
+anyone should care, best in the builder's own words ("give me the
+version you'd tell an engineer in the elevator"). Understanding runs in
+that order: situation, consequence, change, mechanics. Mechanics that
+arrive before the listener knows the problem they serve are just nouns.
 
 Every recurring product noun (a feature name like "the coach") is defined
 at or before first use. The writer always knows what the noun means; only
 a cold listener can feel it missing.
 
-Test: someone who stops listening at the 20% mark can say who was talking
-and what the product does. If all they can repeat is the mission
-statement, the debt is unpaid.
+Test: someone who stops listening at the 20% mark can say who was
+talking, who the product is for, what goes wrong for that person without
+it, what the product changes, and how it does that concretely. If all
+they can repeat is the mission statement — or a list of feature names —
+the debt is unpaid.
 
 ## Part 3 — The conversation (how the two voices behave)
 
@@ -292,13 +299,21 @@ nearly the inverse of good writing:
   or protected ending, or quotes a moment that only makes sense with
   missing context (#6, #7, #9).
 - **Unpaid orientation debt** — an opening whose borrowed context never
-  gets fully repaid: mission named, mechanics missing, feature nouns
-  undefined (#8, #9).
+  gets fully repaid: mission named, problem or mechanics missing, feature
+  nouns undefined (#8, #9).
+- **The feature-list introduction** — mechanisms, internal nouns, or
+  taglines arrive before the listener understands the problem they
+  serve; the orientation lint can pass while a cold listener still
+  can't say what the product is for (#9).
 - **The screenplay scene** — present tense + calendar date + precise
   counts ("it's June 27th, I'm mid-session… a hundred and twenty of my
   sessions"): recall staged as drama (#14).
 - **Performed authenticity** — hesitations, "so yeah", and ellipses
   placed at peaks as beats (#12, #14).
+- **Performed texture** — spontaneity markers (hedges, fillers,
+  stumbles, repetitions) appearing on schedule because a rule rewarded
+  their presence; texture rules may only forbid written-prose tells,
+  never require spoken ones (#12, #14).
 - **Announced structure** — "hold onto it, I'm coming back to it",
   "that's my next segment", "as promised", "rapid-fire close" (#13).
 - **The drama lexicon** — murdered / dissect / autopsy / mercy killing as
